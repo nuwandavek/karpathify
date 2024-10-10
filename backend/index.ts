@@ -92,6 +92,11 @@ function jsonToMarkdown(jsonData) {
   return markdown;
 }
 
+// Previous Instructions
+// - Output a json file containing an array of lessons. Each lesson should have a title, a brief description, and an array of objects containing 2 keys: "code" and "notes". The "code" key should contain the code block, and the "notes" key should contain any notes as Markdown.
+// - Keep in mind that the code and notes will be rendered side by side in the final output for each lesson.
+// - Ensure that the notes reference relevant sections of the paper so that the user understands the paper while going through the code.
+// - Use github flavored markdown for the notes since it supports mermaid diagrams, mathjax, and other features.
 
 async function main() {
   const repoState = JSON.stringify(readImportantFilesAsJson("./repo"));
@@ -103,13 +108,11 @@ async function main() {
 
 Instructions:
 - Go through the repo, and give me a 5 lesson plan to learn this. 
-- The plan needs to be centered around 5 python programs
+- The plan needs to be centered around 5 python programs.
 - Each lesson needs to introduce 1 or 2 a specific concepts in the file, and have code related to that. Also give a brief note about the concept. Tell me what else I can read up to understand it.
 - Each lesson needs to build upon the previous lesson in complexity and length.
-- Output a json file containing an array of lessons. Each lesson should have a title, a brief description, and an array of objects containing 2 keys: "code" and "notes". The "code" key should contain the code block, and the "notes" key should contain any notes as Markdown.
-- Keep in mind that the code and notes will be rendered side by side in the final output for each lesson.
-- Ensure that the notes reference relevant sections of the paper so that the user understands the paper while going through the code.
-- Use github flavored markdown for the notes since it supports mermaid diagrams, mathjax, and other features.
+- Write commends for each method and class in the code. The comments should be used for explaining the relevant sections of the paper.
+- Use formulas from the paper in the comments.
 
   <Repo>${repoState}</Repo>
   <Paper>${paper}</Paper>
@@ -121,5 +124,5 @@ ${currentProficiency}`;
   console.log(chatCompletion.choices[0].message.content);
 }
 
-// main()
-console.log(jsonToMarkdown(example5))
+main()
+// console.log(jsonToMarkdown(example5))
