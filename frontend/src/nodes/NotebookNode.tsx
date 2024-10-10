@@ -74,7 +74,8 @@ export function NotebookMarkdownNode({data}: NodeProps<NotebookNode>) {
       maxWidth: "1000px",
       display: 'flex',
       flexDirection: 'column',
-      alignItems: 'start'
+      alignItems: 'stretch',
+      textAlign: "left",
     }}>
       <Markdown
         remarkPlugins={[remarkMath]}
