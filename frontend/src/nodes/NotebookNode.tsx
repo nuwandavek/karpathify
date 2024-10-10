@@ -21,9 +21,9 @@ const Block = ({ code, notes }: CodeBlock) => {
   return (
     <div style={{display: "flex", flexDirection: "row", justifyContent:"stretch",
       alignItems:"stretch", background: isHovered ? "#333" : "", padding: "10px"}}
-    onMouseOver={()=>setIsHovered(true)} onMouseLeave={()=>setIsHovered(false)}>
+      onMouseOver={()=>setIsHovered(true)} onMouseLeave={()=>setIsHovered(false)}>
       <div style={{width: "50%", overflow: "scroll", border: isHovered ? "1px solid #f1c40f" : "1px solid #eee", borderRadius: "5px",
-    margin: "5px", background: "#1e1e1e"}}>
+      margin: "5px", background: "#1e1e1e"}}>
         <SyntaxHighlighter language={"python"} style={vsd}>
           {code}
         </SyntaxHighlighter>
@@ -50,6 +50,8 @@ export function NotebookNode({data}: NodeProps<NotebookNode>) {
       flexDirection: 'column',
       // alignItems: 'center',
     }}>
+      <h1 style={{textAlign: "center"}}>{lessons[data.lessonIdx].title}</h1>
+      <h3 style={{textAlign: "center"}}>{lessons[data.lessonIdx].description}</h3>
       {
         lessons[data.lessonIdx].content.map((block, idx) => (
           <Block key={idx} code={block.code} notes={block.notes} />
