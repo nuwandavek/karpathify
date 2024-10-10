@@ -270,7 +270,7 @@ function splitMarkdownIntoLessons(markdown) {
 function splitMarkdownFileIntoLessons(markdownFile, outputJSONFile) {
   const markdown = readMarkdownFile(markdownFile);
   const parts = splitMarkdownIntoLessons(markdown)
-  fs.writeFileSync(outputJSONFile, JSON.stringify(parts), "utf-8");
+  fs.writeFileSync(outputJSONFile, JSON.stringify(parts, null, 2), "utf-8");
 }
 
 function readMarkdownFile(filePath) {
