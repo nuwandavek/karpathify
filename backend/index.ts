@@ -5,7 +5,7 @@ import path from "path";
 import example from './examples/example11.json'
 
 const client = new OpenAI({
-  apiKey: process.env["OPENAI_API_KEY"], // This is the default and can be omitted
+  apiKey: process.env["OPENAI_API_KEY_O1"], // This is the default and can be omitted
 });
 
 const matchingRegex = ".*\\.py$"; // Only read python files
