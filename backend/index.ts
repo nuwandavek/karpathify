@@ -100,6 +100,55 @@ const fileInfo = {
 //   console.log(chatCompletion.choices[0].message.content);
 // }
 
+function markdownToIPythonNotebook(markdownFilePath, outputNotebookPath) {
+  // Read the Markdown file content
+  const markdownContent = fs.readFileSync(markdownFilePath, 'utf-8');
+
+  // Split the content on code block indicators
+  const segments = markdownContent.split(/```python([\s\S]*?)```/g);
+
+  // Initialize an empty array for notebook cells
+  let notebookCells = [];
+
+  // Iterate through segments and categorize them as either markdown or code cells
+  segments.forEach((segment, index) => {
+      if (index % 2 === 0) {
+          // Even index -> Markdown cell
+          if (segment.trim()) {
+              notebookCells.push({
+                  cell_type: 'markdown',
+                  metadata: {},
+                  source: segment.split('\n'),
+              });
+          }
+      } else {
+          // Odd index -> Python code cell
+          notebookCells.push({
+              cell_type: 'code',
+              execution_count: null,
+              metadata: {},
+              outputs: [],
+              source: segment.split('\n'),
+          });
+      }
+  });
+
+  // Create the notebook structure
+  const notebook = {
+      cells: notebookCells,
+      metadata: {
+          language_info: {
+              name: 'python',
+          },
+      },
+      nbformat: 4,
+      nbformat_minor: 5,
+  };
+
+  // Write the notebook to the output file
+  fs.writeFileSync(outputNotebookPath, JSON.stringify(notebook, null, 2), 'utf-8');
+}
+
 function jsonToMarkdown(jsonData) {
   let markdown = "";
 
@@ -125,28 +174,60 @@ function jsonToMarkdown(jsonData) {
   return markdown;
 }
 
+// Previous Instrutions
+// - Each lesson should have at least 5 code blocks and notes, with each code block not being more than 5-10 lines.
+
 async function main() {
   const repoState = JSON.stringify(readImportantFilesAsJson("./repo"));
   const paper = fs.readFileSync("./docs/depth-pro_small.md", "utf-8");
   const currentProficiency =
     "I understand calculus, python, pytorch. I have some basic experience with neural nets.";
 
-  const oai_auto_prompt = `You are an expert machine learning researcher and teacher like Andrej Karpathy. Create a 5 lesson plan to help the user understand the key insights and implementation details of a specific machine learning paper, based on their current proficiency, the paper itself, and the associated repository. 
+    const oai_auto_prompt1 = `You are an expert machine learning researcher and teacher like Andrej Karpathy. Create a 5 lesson plan as an iPython notebook to help the user understand the key insights and implementation details of a specific machine learning paper, based on their current proficiency, the paper itself, and the associated repository. Each lesson must be self contained. Expect the user to run each cell in the notebook as they go through the lessons.
+
+    <MyCurrentProficiency>${currentProficiency}</MyCurrentProficiency>
+    <Paper>${paper}</Paper>
+    <Repo>${repoState}</Repo>
+  
+    # Instructions
+    
+    1. **Read and Understand the Paper**:
+       - Extract key insights from the paper.
+    
+    2. **Review the Repository**:
+       - Identify important code snippets relevant to the paper's insights.
+       - Ignore irrelevant code.
+    
+    3. **Develop Lesson Plan**:
+       - Divide the essential information from the paper and repository into 5 lessons.
+       - Lesson 1 must start from the user's current proficiency level.
+       - Each lesson introduces 1 or 2 specific concepts using the relevant code snippets. It builds on the previous lesson, increasing in complexity.
+       - Each lesson must be self contained
+       - Provide detailed notes explaining each concept through the code and explanation
+       - Ensure that by lesson 5, all key insights from the paper and related code are covered
+  
+    # Notes
+    - Use formulas from the paper where relevant for better understanding.
+    - Notes should reference corresponding sections in the paper verbatim.
+    - Keep lessons concise, logical, and progressive.
+    - Ensure annotations are outside of the code to maintain clarity and focus on understanding through notes.
+    - Use github flavored markdown for notes to support mermaid diagrams, mathjax, and other features.
+    `;
+
+  const oai_auto_prompt = `You are an expert machine learning researcher and teacher like Andrej Karpathy. Create a 5 lesson plan as an iPython notebook to help the user understand the key insights and implementation details of a specific machine learning paper, based on their current proficiency, the paper itself, and the associated repository. Each lesson must be self contained. Expect the user to run each cell in the notebook as they go through the lessons.
 
   <MyCurrentProficiency>${currentProficiency}</MyCurrentProficiency>
   <Paper>${paper}</Paper>
   <Repo>${repoState}</Repo>
 
-  # Steps
+  # Instructions
   
   1. **Read and Understand the Paper**:
      - Extract key insights from the paper.
-     - Place these insights within <PaperInsights> tags. 
   
   2. **Review the Repository**:
      - Identify important code snippets relevant to the paper's insights.
      - Ignore irrelevant code.
-     - Place significant code snippets within <ImportantCode> tags.
   
   3. **Develop Lesson Plan**:
      - Divide the essential information from the paper and repository into 5 lessons.
@@ -193,8 +274,6 @@ async function main() {
 - Do not put explanations in the code or code comments. The notes should explain the code.
   `;
 
-
-
   const chatCompletion = await client.chat.completions.create({
     messages: [{ role: "user", content: oai_auto_prompt }],
     model: "o1-mini-2024-09-12",
@@ -203,6 +282,8 @@ async function main() {
   console.log(chatCompletion.choices[0].message.content);
 }
 
-// main()
+main()
 // console.log(jsonToMarkdown(example))
-processJSONDirectory("./examples");
+// processJSONDirectory("./examples");
+// processJSONDirectory("./examples");
+// markdownToIPythonNotebook('./examples/example_12.md', './examples/example_12.ipynb');
