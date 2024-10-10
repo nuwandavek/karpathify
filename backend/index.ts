@@ -322,10 +322,10 @@ async function main() {
   console.log(chatCompletion.choices[0].message.content);
 }
 
-// main()
+main()
 // console.log(jsonToMarkdown(example))
 // processJSONDirectory("./examples");
 // processJSONDirectory("./examples");
-markdownToIPythonNotebook('./examples/example_12.md', './examples/example_13.ipynb');
+// markdownToIPythonNotebook('./examples/example_12.md', './examples/example_13.ipynb');
 // console.log(getJSONFromMDFile('./examples/example_12.md'))
 // splitMarkdownFileIntoLessons('./examples/example_12.md', './examples/example_12.json');
