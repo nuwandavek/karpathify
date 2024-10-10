@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Lesson, CodeBlock } from './types';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import { dracula } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import 'katex/dist/katex.min.css';
 
 
@@ -73,11 +74,26 @@ export function NotebookMarkdownNode({data}: NodeProps<NotebookNode>) {
       maxWidth: "1000px",
       display: 'flex',
       flexDirection: 'column',
-      // alignItems: 'center',
+      alignItems: 'start'
     }}>
       <Markdown
         remarkPlugins={[remarkMath]}
-        rehypePlugins={[rehypeKatex]}>
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          code({ node, inline, className, children, ...props }: any) {
+            const match = /language-(\w+)/.exec(className || '');
+  
+            return !inline && match ? (
+              <SyntaxHighlighter style={dracula} PreTag="div" language={match[1]} {...props}>
+                {String(children).replace(/\n$/, '')}
+              </SyntaxHighlighter>
+            ) : (
+              <code className={className} {...props}>
+                {children}
+              </code>
+            );
+          },
+        }}>
           {parts[data.lessonIdx].content}
         </Markdown>
       <Handle type="source" position={Position.Right} />
