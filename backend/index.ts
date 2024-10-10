@@ -2,7 +2,7 @@ import "dotenv/config";
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
-import example4 from './examples/example4.json'
+import example5 from './examples/example5.json'
 
 const client = new OpenAI({
   apiKey: process.env["OPENAI_API_KEY"], // This is the default and can be omitted
@@ -121,5 +121,5 @@ ${currentProficiency}`;
   console.log(chatCompletion.choices[0].message.content);
 }
 
-main()
-// console.log(jsonToMarkdown(example4))
+// main()
+console.log(jsonToMarkdown(example5))
