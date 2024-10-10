@@ -1,0 +1,150 @@
+{
+  "lessons": [
+    {
+      "title": "Lesson 1: Introduction to Monocular Depth Estimation",
+      "description": "In this lesson, we'll explore the basics of monocular depth estimation using a simple pre-trained model. We'll understand how depth can be inferred from a single image using neural networks.",
+      "content": [
+        {
+          "code": "import torch\nimport torchvision.transforms as transforms\nfrom PIL import Image\nimport matplotlib.pyplot as plt",
+          "notes": "# Setting up the environment\nWe start by importing the necessary libraries: `torch` for tensor computations, `torchvision.transforms` for image preprocessing, `PIL` for image handling, and `matplotlib` for visualization."
+        },
+        {
+          "code": "model = torch.hub.load('intel-isl/MiDaS', 'MiDaS_small')\nmodel.eval()",
+          "notes": "# Loading a pre-trained depth estimation model\nWe load the MiDaS_small model from PyTorch Hub, which is a lightweight model for monocular depth estimation."
+        },
+        {
+          "code": "transform = transforms.Compose([\n    transforms.Resize(256),\n    transforms.ToTensor(),\n    transforms.Normalize(\n        mean=[0.485, 0.456, 0.406],\n        std=[0.229, 0.224, 0.225]\n    )\n])",
+          "notes": "# Defining the image transformation\nWe define a transformation pipeline to resize the input image, convert it to a tensor, and normalize it. This is essential to prepare the image for the model."
+        },
+        {
+          "code": "img = Image.open('input.jpg')\ninput_tensor = transform(img).unsqueeze(0)",
+          "notes": "# Preprocessing the input image\nWe load the input image and apply the transformation to get it ready for depth estimation."
+        },
+        {
+          "code": "with torch.no_grad():\n    depth = model(input_tensor)\n    depth = depth.squeeze().cpu().numpy()",
+          "notes": "# Performing depth estimation\nWe pass the preprocessed image to the model to get the depth map. We use `torch.no_grad()` to disable gradient calculations since we are in inference mode."
+        },
+        {
+          "code": "plt.imshow(depth)\nplt.show()",
+          "notes": "# Visualizing the depth map\nFinally, we visualize the estimated depth map using matplotlib."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 2: Building an Efficient Multi-Scale ViT-based Architecture",
+      "description": "In this lesson, we'll implement a simple multi-scale Vision Transformer (ViT) based encoder. We'll learn how multi-scale processing helps in capturing both global context and fine details.",
+      "content": [
+        {
+          "code": "import torch\nimport torch.nn as nn",
+          "notes": "# Importing PyTorch modules\nWe need `torch` and `torch.nn` to build neural network components."
+        },
+        {
+          "code": "class MultiScaleViTEncoder(nn.Module):\n    def __init__(self, img_size=224, patch_size=16, embed_dim=768):\n        super().__init__()\n        self.img_size = img_size\n        self.patch_size = patch_size\n        self.embed_dim = embed_dim\n        self.num_patches = (img_size // patch_size) ** 2\n\n        self.patch_embeddings = nn.Conv2d(in_channels=3,\n                                          out_channels=embed_dim,\n                                          kernel_size=patch_size,\n                                          stride=patch_size)\n\n        self.position_embeddings = nn.Parameter(torch.zeros(1, self.num_patches, embed_dim))\n        self.transformer = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model=embed_dim, nhead=8), num_layers=6)",
+          "notes": "# Defining the MultiScaleViTEncoder class\nWe create a class for our multi-scale ViT encoder. This encoder creates patch embeddings from the image and processes them using a Transformer encoder.\n\nRefer to **Section 3.1** of the paper where they discuss the multi-scale ViT-based architecture."
+        },
+        {
+          "code": "    def forward(self, x):\n        x = self.patch_embeddings(x)  # [B, embed_dim, H/patch_size, W/patch_size]\n        x = x.flatten(2).transpose(1, 2)  # [B, num_patches, embed_dim]\n        x = x + self.position_embeddings\n        x = self.transformer(x)\n        return x",
+          "notes": "# Implementing the forward pass\nIn the `forward` method, we convert the image into patch embeddings, add positional embeddings, and pass it through the Transformer encoder."
+        },
+        {
+          "code": "encoder = MultiScaleViTEncoder()\ninput_image = torch.randn(1, 3, 224, 224)\nfeatures = encoder(input_image)",
+          "notes": "# Using the encoder\nWe instantiate the encoder and pass a dummy image to obtain the feature representations."
+        },
+        {
+          "code": "# Print the shape of the features\nprint(features.shape)",
+          "notes": "# Checking the output\nThe shape of `features` should be `[1, num_patches, embed_dim]`, indicating that we have processed the image into a set of embeddings."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 3: Combining Real and Synthetic Data for Training",
+      "description": "This lesson shows how combining real-world and synthetic datasets can improve the generalization of depth estimation models. We'll simulate training by combining data loaders.",
+      "content": [
+        {
+          "code": "from torch.utils.data import Dataset, DataLoader\n\nclass RealWorldDataset(Dataset):\n    def __init__(self):\n        # Initialize real-world dataset\n        pass\n    def __len__(self):\n        return 1000\n    def __getitem__(self, idx):\n        # Return an image and its depth map\n        return torch.randn(3, 224, 224), torch.randn(224, 224)",
+          "notes": "# Defining the RealWorldDataset class\nWe create a placeholder class for a real-world dataset. In practice, this would load actual images and depth maps."
+        },
+        {
+          "code": "class SyntheticDataset(Dataset):\n    def __init__(self):\n        # Initialize synthetic dataset\n        pass\n    def __len__(self):\n        return 1000\n    def __getitem__(self, idx):\n        # Return an image and its depth map\n        return torch.randn(3, 224, 224), torch.randn(224, 224)",
+          "notes": "# Defining the SyntheticDataset class\nSimilarly, we create a class for a synthetic dataset."
+        },
+        {
+          "code": "real_dataset = RealWorldDataset()\nsynthetic_dataset = SyntheticDataset()",
+          "notes": "# Instantiating datasets\nWe create instances of both datasets."
+        },
+        {
+          "code": "combined_dataset = real_dataset + synthetic_dataset\ncombined_loader = DataLoader(combined_dataset, batch_size=16, shuffle=True)",
+          "notes": "# Combining datasets\nWe combine the two datasets and create a data loader for training."
+        },
+        {
+          "code": "model = MultiScaleViTEncoder()\noptimizer = torch.optim.Adam(model.parameters(), lr=1e-4)\nloss_fn = nn.MSELoss()",
+          "notes": "# Setting up training components\nWe define the model, optimizer, and loss function for training."
+        },
+        {
+          "code": "for epoch in range(5):\n    for images, depths in combined_loader:\n        optimizer.zero_grad()\n        preds = model(images)\n        loss = loss_fn(preds.squeeze(), depths)\n        loss.backward()\n        optimizer.step()",
+          "notes": "# Training loop\nWe simulate a simple training loop where we process batches of images and depths, compute the loss, and update the model parameters."
+        },
+        {
+          "code": "# Print a message\nprint('Training completed.')",
+          "notes": "# Indicating completion\nWe print a message after the training loop to indicate that training has finished."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 4: Implementing Boundary Accuracy Metrics",
+      "description": "In this lesson, we'll implement new metrics for evaluating the accuracy of depth boundaries. We'll focus on calculating the Boundary F1 Score.",
+      "content": [
+        {
+          "code": "import torch\nimport torch.nn.functional as F",
+          "notes": "# Importing necessary modules\nWe need `torch` and `torch.nn.functional` for tensor operations."
+        },
+        {
+          "code": "def gradient(x):\n    h_x = x.size()[2]\n    w_x = x.size()[3]\n    left = x[:, :, 1:, :]\n    right = x[:, :, :-1, :]\n    top = x[:, :, :, 1:]\n    bottom = x[:, :, :, :-1]\n    dx = left - right\n    dy = top - bottom\n    dx = F.pad(dx, (0,0,0,1))\n    dy = F.pad(dy, (0,1,0,0))\n    return dx, dy",
+          "notes": "# Defining a gradient function\nThis function computes the gradients of the depth map in the x and y directions. It's essential for identifying edges in the depth map."
+        },
+        {
+          "code": "def boundary_f1_score(pred_depth, true_depth, threshold=0.1):\n    pred_dx, pred_dy = gradient(pred_depth)\n    true_dx, true_dy = gradient(true_depth)\n    pred_grad = torch.sqrt(pred_dx ** 2 + pred_dy ** 2)\n    true_grad = torch.sqrt(true_dx ** 2 + true_dy ** 2)\n    pred_boundary = pred_grad > threshold\n    true_boundary = true_grad > threshold\n    tp = (pred_boundary & true_boundary).float().sum()\n    fp = (pred_boundary & (~true_boundary)).float().sum()\n    fn = ((~pred_boundary) & true_boundary).float().sum()\n    precision = tp / (tp + fp + 1e-8)\n    recall = tp / (tp + fn + 1e-8)\n    f1 = 2 * precision * recall / (precision + recall + 1e-8)\n    return f1.item()",
+          "notes": "# Implementing the Boundary F1 Score\nWe calculate the gradients of both the predicted and true depth maps to find edges. We then compute true positives, false positives, and false negatives to calculate precision, recall, and finally the F1 score.\n\nRefer to **Section 3.2** of the paper where they introduce new metrics for boundary accuracy."
+        },
+        {
+          "code": "# Example usage with dummy data\npred_depth = torch.randn(1, 1, 224, 224)\ntrue_depth = torch.randn(1, 1, 224, 224)\nf1_score = boundary_f1_score(pred_depth, true_depth)\nprint(f'Boundary F1 Score: {f1_score}')",
+          "notes": "# Testing the metric\nWe use random tensors to simulate depth maps and compute the Boundary F1 Score."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 5: Estimating Focal Length from a Single Image",
+      "description": "In the final lesson, we'll implement a simple neural network to estimate the camera's focal length from a single image. We'll understand its importance in producing metric depth maps.",
+      "content": [
+        {
+          "code": "class FocalLengthEstimator(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.encoder = nn.Sequential(\n            nn.Conv2d(3, 16, kernel_size=3, stride=2, padding=1),\n            nn.ReLU(),\n            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),\n            nn.ReLU(),\n            nn.AdaptiveAvgPool2d(1)\n        )\n        self.fc = nn.Linear(32, 1)",
+          "notes": "# Defining the FocalLengthEstimator class\nWe create a simple convolutional neural network that processes the image and outputs a single value representing the focal length.\n\nRefer to **Section 3.3** of the paper where they discuss focal length estimation."
+        },
+        {
+          "code": "    def forward(self, x):\n        x = self.encoder(x)\n        x = x.view(x.size(0), -1)\n        f = self.fc(x)\n        return f",
+          "notes": "# Implementing the forward pass\nThe `forward` method applies the encoder to extract features and then uses a fully connected layer to predict the focal length."
+        },
+        {
+          "code": "estimator = FocalLengthEstimator()\ninput_image = torch.randn(1, 3, 224, 224)\nfocal_length = estimator(input_image)\nprint(f'Estimated Focal Length: {focal_length.item()} pixels')",
+          "notes": "# Using the estimator\nWe instantiate the estimator and pass a dummy image to get the estimated focal length."
+        },
+        {
+          "code": "# Assume we have ground truth focal lengths\ntrue_focal_lengths = torch.tensor([500.0])\nloss_fn = nn.MSELoss()\noptimizer = torch.optim.Adam(estimator.parameters(), lr=1e-4)",
+          "notes": "# Setting up training components\nWe define a loss function and optimizer to train the focal length estimator."
+        },
+        {
+          "code": "for epoch in range(10):\n    optimizer.zero_grad()\n    focal_length = estimator(input_image)\n    loss = loss_fn(focal_length.squeeze(), true_focal_lengths)\n    loss.backward()\n    optimizer.step()",
+          "notes": "# Training the estimator\nWe simulate a training loop to optimize the estimator's parameters."
+        },
+        {
+          "code": "# Print the final estimated focal length\nfocal_length = estimator(input_image)\nprint(f'Estimated Focal Length after training: {focal_length.item()} pixels')",
+          "notes": "# Observing improvement\nAfter training, the estimator should provide a better estimate of the focal length."
+        },
+        {
+          "code": "# Integrate focal length into depth estimation\n# depth_map = depth_network(image) / focal_length",
+          "notes": "# Using estimated focal length in depth estimation\nThe estimated focal length can be used to convert relative depth maps into metric depth maps by appropriately scaling them."
+        }
+      ]
+    }
+  ]
+}

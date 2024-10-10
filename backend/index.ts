@@ -2,7 +2,7 @@ import "dotenv/config";
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
-import example from './examples/example10.json'
+import example from './examples/example11.json'
 
 const client = new OpenAI({
   apiKey: process.env["OPENAI_API_KEY"], // This is the default and can be omitted
