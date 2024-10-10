@@ -2,7 +2,6 @@ import "dotenv/config";
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
-import example from './examples/example11.json'
 
 const client = new OpenAI({
   apiKey: process.env["OPENAI_API_KEY_O1"], // This is the default and can be omitted
@@ -11,6 +10,38 @@ const client = new OpenAI({
 const matchingRegex = ".*\\.py$"; // Only read python files
 const excludedDirs = [".git", ".cache", "dist", ".vscode"]; // Directories to ignore
 // const excludedFiles = [".gitignore", ".DS_Store", "package-lock.json"]; // Files to ignore
+
+// Function to check if a file exists
+function fileExists(filePath) {
+  return fs.existsSync(filePath);
+}
+
+// Function to process files in a directory
+function processJSONDirectory(directoryPath) {
+  fs.readdir(directoryPath, (err, files) => {
+      if (err) {
+          console.error('Error reading directory:', err);
+          return;
+      }
+
+      files.forEach((file) => {
+          const jsonFilePath = path.join(directoryPath, file);
+
+          if (path.extname(file) === '.json') {
+              const mdFileName = path.basename(file, '.json') + '.md';
+              const mdFilePath = path.join(directoryPath, mdFileName);
+
+              // Check if the corresponding .md file exists
+              if (!fileExists(mdFilePath)) {
+                  console.log(`Generating ${mdFileName} from ${file}`);
+                  const jsonContent = JSON.parse(fs.readFileSync(jsonFilePath, 'utf-8'))
+                  const mdContent = jsonToMarkdown(jsonContent);
+                  fs.writeFileSync(mdFilePath, mdContent, 'utf-8');
+              }
+          }
+      });
+  });
+}
 
 function readImportantFilesAsJson(dirPath) {
   const result = {};
@@ -164,5 +195,6 @@ async function main() {
   console.log(chatCompletion.choices[0].message.content);
 }
 
-main()
+// main()
 // console.log(jsonToMarkdown(example))
+processJSONDirectory('./examples')
