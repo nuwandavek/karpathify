@@ -19,27 +19,29 @@ function fileExists(filePath) {
 // Function to process files in a directory
 function processJSONDirectory(directoryPath) {
   fs.readdir(directoryPath, (err, files) => {
-      if (err) {
-          console.error('Error reading directory:', err);
-          return;
+    if (err) {
+      console.error("Error reading directory:", err);
+      return;
+    }
+
+    files.forEach((file) => {
+      const jsonFilePath = path.join(directoryPath, file);
+
+      if (path.extname(file) === ".json") {
+        const mdFileName = path.basename(file, ".json") + ".md";
+        const mdFilePath = path.join(directoryPath, mdFileName);
+
+        // Check if the corresponding .md file exists
+        if (!fileExists(mdFilePath)) {
+          console.log(`Generating ${mdFileName} from ${file}`);
+          const jsonContent = JSON.parse(
+            fs.readFileSync(jsonFilePath, "utf-8")
+          );
+          const mdContent = jsonToMarkdown(jsonContent);
+          fs.writeFileSync(mdFilePath, mdContent, "utf-8");
+        }
       }
-
-      files.forEach((file) => {
-          const jsonFilePath = path.join(directoryPath, file);
-
-          if (path.extname(file) === '.json') {
-              const mdFileName = path.basename(file, '.json') + '.md';
-              const mdFilePath = path.join(directoryPath, mdFileName);
-
-              // Check if the corresponding .md file exists
-              if (!fileExists(mdFilePath)) {
-                  console.log(`Generating ${mdFileName} from ${file}`);
-                  const jsonContent = JSON.parse(fs.readFileSync(jsonFilePath, 'utf-8'))
-                  const mdContent = jsonToMarkdown(jsonContent);
-                  fs.writeFileSync(mdFilePath, mdContent, 'utf-8');
-              }
-          }
-      });
+    });
   });
 }
 
@@ -81,7 +83,7 @@ const fileInfo = {
   status: "processed",
   status_details: null,
   _request_id: "req_2a3b263ab87e7144e88df1e0823002b2",
-}
+};
 
 // async function convertFromPDF() {
 //   // const filePath = './docs/depth-pro.pdf'
@@ -99,7 +101,7 @@ const fileInfo = {
 // }
 
 function jsonToMarkdown(jsonData) {
-  let markdown = '';
+  let markdown = "";
 
   jsonData.lessons.forEach((lesson, index) => {
     // Add lesson title and description
@@ -113,9 +115,9 @@ function jsonToMarkdown(jsonData) {
         markdown += `**Note:** ${content.notes}\n\n`;
       }
       if (content.code) {
-        markdown += '```python\n'; // Assuming the code is in Python
+        markdown += "```python\n"; // Assuming the code is in Python
         markdown += `${content.code}\n`;
-        markdown += '```\n\n'; 
+        markdown += "```\n\n";
       }
     });
   });
@@ -126,7 +128,8 @@ function jsonToMarkdown(jsonData) {
 async function main() {
   const repoState = JSON.stringify(readImportantFilesAsJson("./repo"));
   const paper = fs.readFileSync("./docs/depth-pro_small.md", "utf-8");
-  const currentProficiency = "I understand calculus, python, pytorch. I have some basic experience with neural nets.";
+  const currentProficiency =
+    "I understand calculus, python, pytorch. I have some basic experience with neural nets.";
 
   const oai_auto_prompt = `You are an expert machine learning researcher and teacher like Andrej Karpathy. Create a 5 lesson plan to help the user understand the key insights and implementation details of a specific machine learning paper, based on their current proficiency, the paper itself, and the associated repository. 
 
@@ -168,8 +171,8 @@ async function main() {
   - Notes should reference corresponding sections in the paper verbatim.
   - Keep lessons concise, logical, and progressive.
   - Ensure annotations are outside of the code to maintain clarity and focus on understanding through notes.
-  `
-  
+  `;
+
   const prompt = `You are an expert machine learning researcher and teacher. You have a paper and a repo. You should create a 5 lesson plan for me to go from where I am to understanding the key insights and implementation details of the paper.
 
   <MyCurrentProficiency>${currentProficiency}</MyCurrentProficiency>
@@ -197,4 +200,4 @@ async function main() {
 
 // main()
 // console.log(jsonToMarkdown(example))
-processJSONDirectory('./examples')
+processJSONDirectory("./examples");
