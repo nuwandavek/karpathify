@@ -1,0 +1,5 @@
+bun.lockb
+node_modules
+.env
+repo
+docs
