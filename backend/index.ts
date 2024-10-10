@@ -177,6 +177,94 @@ function jsonToMarkdown(jsonData) {
 // Previous Instrutions
 // - Each lesson should have at least 5 code blocks and notes, with each code block not being more than 5-10 lines.
 
+function markdownToCustomJson(markdown) {
+  const lessons = [];
+  const lines = markdown.split('\n');
+  let currentLesson = null;
+  let currentContent = null;
+
+  lines.forEach(line => {
+      // Check for new lesson title
+      if (line.startsWith('# Lesson')) {
+          if (currentLesson) {
+              lessons.push(currentLesson); // Push the previous lesson
+          }
+          currentLesson = {
+              title: line.replace('# ', '').trim(),
+              description: '',
+              content: []
+          };
+      }
+      // Check for description
+      else if (line.startsWith('*')) {
+          if (currentLesson) {
+              currentLesson.description = line.replace('*', '').trim();
+          }
+      }
+      // Check for code block start
+      else if (line.startsWith('```')) {
+          if (currentContent && currentContent.code) {
+              currentLesson.content.push(currentContent);
+              currentContent = null;
+          } else {
+              currentContent = { code: "", notes: "" };
+          }
+      }
+      // Handle code lines
+      else if (currentContent && currentContent.code !== undefined) {
+          currentContent.code += line + '\n';
+      }
+      // Handle markdown text
+      else if (line.trim()) {
+          if (!currentContent) {
+              currentContent = { code: "", notes: "" };
+          }
+          currentContent.notes += line.trim() + ' ';
+      }
+  });
+
+  // Push the last lesson and content
+  if (currentContent) currentLesson.content.push(currentContent);
+  if (currentLesson) lessons.push(currentLesson);
+
+  return { lessons };
+}
+
+function splitMarkdownFileIntoLessons(markdownFile, outputJSONFile) {
+  const markdown = readMarkdownFile(markdownFile);
+  // Split the markdown content by lesson headers
+  const lessons = markdown.split(/(?=^# Lesson \d+:)/gm);
+  let parts = [];
+
+  lessons.forEach((lesson, index) => {
+      // If it's the first part (before Lesson 1), store it as an introduction or setup
+      if (index === 0 && lesson.trim()) {
+          parts.push({
+              partTitle: "Introduction",
+              content: lesson.trim(),
+          });
+      } else {
+          // For each lesson, split the content by sections within that lesson
+          const lessonParts = lesson.split(/(?=^---)/gm).map((part) => part.trim());
+          const lessonTitle = lesson.match(/^# Lesson \d+: (.*)$/m)[1];
+          
+          // Push the lesson content part into the array
+          lessonParts.forEach((part, idx) => {
+              parts.push({
+                  partTitle: idx === 0 ? lessonTitle : `${lessonTitle} - Part ${idx + 1}`,
+                  content: part,
+              });
+          });
+      }
+  });
+
+  fs.writeFileSync(outputJSONFile, JSON.stringify(parts), "utf-8");
+}
+
+function readMarkdownFile(filePath) {
+  return fs.readFileSync(filePath, "utf-8");
+}
+
 async function main() {
   const repoState = JSON.stringify(readImportantFilesAsJson("./repo"));
   const paper = fs.readFileSync("./docs/depth-pro_small.md", "utf-8");
@@ -282,8 +370,10 @@ async function main() {
   console.log(chatCompletion.choices[0].message.content);
 }
 
-main()
+// main()
 // console.log(jsonToMarkdown(example))
 // processJSONDirectory("./examples");
 // processJSONDirectory("./examples");
 // markdownToIPythonNotebook('./examples/example_12.md', './examples/example_12.ipynb');
+// console.log(getJSONFromMDFile('./examples/example_12.md'))
+splitMarkdownFileIntoLessons('./examples/example_12.md', './examples/example_12.json');
