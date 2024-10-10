@@ -287,86 +287,26 @@ async function main() {
        - Ignore irrelevant code.
     
     3. **Develop Lesson Plan**:
-       - Divide the essential information from the paper and repository into 5 lessons.
+       - Divide the essential information from the paper and repository into N lessons. Should be at least 5 lessons.
        - Lesson 1 must start from the user's current proficiency level.
        - Each lesson introduces 1 or 2 specific concepts using the relevant code snippets. It builds on the previous lesson, increasing in complexity.
        - Each lesson must be self contained
-       - Provide detailed notes explaining each concept through the code and explanation
-       - Ensure that by lesson 5, all key insights from the paper and related code are covered
+       - Provide detailed notes explaining each concept through the code and explanation. Use excerpts and formulas from the paper where relevant.
+       - Give very detailed explanations for each code block. Remember the users' proficiency level.
+       - Ensure that by the last lesson, all key insights from the paper and related code are covered
   
     # Notes
-    - Use formulas from the paper where relevant for better understanding.
-    - Notes should reference corresponding sections in the paper verbatim.
     - Keep lessons concise, logical, and progressive.
     - Ensure annotations are outside of the code to maintain clarity and focus on understanding through notes.
     - Use github flavored markdown for notes to support mermaid diagrams, mathjax, and other features.
     `;
-
-  const oai_auto_prompt = `You are an expert machine learning researcher and teacher like Andrej Karpathy. Create a 5 lesson plan as an iPython notebook to help the user understand the key insights and implementation details of a specific machine learning paper, based on their current proficiency, the paper itself, and the associated repository. Each lesson must be self contained. Expect the user to run each cell in the notebook as they go through the lessons.
-
-  <MyCurrentProficiency>${currentProficiency}</MyCurrentProficiency>
-  <Paper>${paper}</Paper>
-  <Repo>${repoState}</Repo>
-
-  # Instructions
-  
-  1. **Read and Understand the Paper**:
-     - Extract key insights from the paper.
-  
-  2. **Review the Repository**:
-     - Identify important code snippets relevant to the paper's insights.
-     - Ignore irrelevant code.
-  
-  3. **Develop Lesson Plan**:
-     - Divide the essential information from the paper and repository into 5 lessons.
-     - Put high level plan in <LessonPlan> tags. Tell me how each lesson takes the user from their current proficiency to understanding the key insights and implementation details of the paper. Tell how each lesson builds on the previous one.
-     - Lesson 1 must start from the user's current proficiency level.
-     - Each lesson introduces 1 or 2 specific concepts using the relevant code snippets. It builds on the previous lesson, increasing in complexity.
-     - Provide detailed notes explaining each concept and the associated code thoroughly.
-     - Ensure lesson 5 is almost all the code from <ImportantCode> tags and the key insights from the paper.
-     - Each lesson should have at least 5 code blocks and notes, with each code block not being more than 5-10 lines.
-     - Do not do ... in code. It should have the full code. This code will be executed by the user.
-     - Do not hold back on writing code. The user should be able to run the code and understand the full lesson.
-     - Do not put explanations in the code or code comments. The notes should explain the code.
-     - Use github flavored markdown for the notes since it supports mermaid diagrams, mathjax, and other feature (Use them!)
-  
-  # Output Format
-  - <PaperInsights> tags: Key insights from the paper.
-  - <ImportantCode> tags: Important code snippets from the repository.
-  - <LessonPlan> tags: High-level lesson
-  - A JSON file containing an array of lessons.
-  - Each lesson consists of:
-    - A title,
-    - A detailed description,
-    - An array of objects each containing:
-      - "code": the relevant code block.
-      - "notes": explanatory notes in GitHub-Flavored Markdown.
-  `
-  
-  const prompt = `You are an expert machine learning researcher and teacher. You have a paper and a repo. You should create a 5 lesson plan for me to go from where I am to understanding the key insights and implementation details of the paper.
-
-  <MyCurrentProficiency>${currentProficiency}</MyCurrentProficiency>
-  <Paper>${paper}</Paper>
-  <Repo>${repoState}</Repo>
-
-# Routine:
-1. Read the paper and understand the key insights. Put them in <PaperInsights> tags.
-2. Review the repo and understand the important code snippets, ignore the rest. Put them in <ImportantCode> tags.
-3. Break this essential information into 5 lessons, each building on the previous one, building up in complexity. Each lesson needs to introduce 1 or 2 specific concepts using the code. Give a detailed note explaining the concept & code clearly. The first lesson needs to start from where I am currently. The last lesson should end with me understanding the key insights and implementation details of the paper.
-4. Output a json file containing an array of lessons. Each lesson should have a title, a brief description, and an array of objects containing 2 keys: "code" and "notes". The "code" key should contain the code block, and the "notes" key should contain any notes as Markdown.
-
-# General Guidelines:
-- Ensure that the notes reference relevant sections of the paper so that the user understands the paper while going through the code. Use formulas from the paper in the notes.
-- Use github flavored markdown for the notes since it supports mermaid diagrams, mathjax, and other features. (Use them!)
-- Avoid large chunks of code or notes. No code block should be more than 5-10 lines long. Break them down into smaller blocks.
-- Do not put explanations in the code or code comments. The notes should explain the code.
-  `;
+;
 
   const chatCompletion = await client.chat.completions.create({
-    messages: [{ role: "user", content: oai_auto_prompt }],
-    model: "o1-mini-2024-09-12",
+    messages: [{ role: "user", content: oai_auto_prompt1 }],
+    model: "o1-preview-2024-09-12",
   });
-  console.log(JSON.stringify(chatCompletion.usage))
+  // console.log(JSON.stringify(chatCompletion.usage))
   console.log(chatCompletion.choices[0].message.content);
 }
 
