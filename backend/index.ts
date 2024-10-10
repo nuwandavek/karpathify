@@ -95,7 +95,7 @@ function jsonToMarkdown(jsonData) {
 
 async function main() {
   const repoState = JSON.stringify(readImportantFilesAsJson("./repo"));
-  const paperMD = fs.readFileSync("./docs/depth-pro.md", "utf-8");
+  const paper = fs.readFileSync("./docs/depth-pro.ps", "utf-8");
   const currentProficiency = "I understand calculus, python, pytorch";
 
   const prompt = `
@@ -110,7 +110,7 @@ Instructions:
 - Keep in mind that the code and notes will be rendered side by side in the final output for each lesson.
 
   <Repo>${repoState}</Repo>
-  <Paper>${paperMD}</Paper>
+  <Paper>${paper}</Paper>
 ${currentProficiency}`;
   const chatCompletion = await client.chat.completions.create({
     messages: [{ role: "user", content: prompt }],
