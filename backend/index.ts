@@ -150,29 +150,30 @@ async function main() {
   
   3. **Develop Lesson Plan**:
      - Divide the essential information from the paper and repository into 5 lessons.
-     - Put high level plan in <LessonPlan> tags.
+     - Put high level plan in <LessonPlan> tags. Tell me how each lesson takes the user from their current proficiency to understanding the key insights and implementation details of the paper. Tell how each lesson builds on the previous one.
      - Lesson 1 must start from the user's current proficiency level.
      - Each lesson introduces 1 or 2 specific concepts using the relevant code snippets. It builds on the previous lesson, increasing in complexity.
      - Provide detailed notes explaining each concept and the associated code thoroughly.
      - Ensure lesson 5 is almost all the code from <ImportantCode> tags and the key insights from the paper.
      - Each lesson should have at least 5 code blocks and notes, with each code block not being more than 5-10 lines.
+     - Do not do ... in code. It should have the full code. This code will be executed by the user.
+     - Do not hold back on writing code. The user should be able to run the code and understand the full lesson.
+     - Do not put explanations in the code or code comments. The notes should explain the code.
+     - Use github flavored markdown for the notes since it supports mermaid diagrams, mathjax, and other feature (Use them!)
   
   # Output Format
-  - Produce a JSON file containing an array of lessons.
+  - <PaperInsights> tags: Key insights from the paper.
+  - <ImportantCode> tags: Important code snippets from the repository.
+  - <LessonPlan> tags: High-level lesson
+  - A JSON file containing an array of lessons.
   - Each lesson consists of:
     - A title,
-    - A brief description,
+    - A detailed description,
     - An array of objects each containing:
       - "code": the relevant code block.
       - "notes": explanatory notes in GitHub-Flavored Markdown.
-
-  # Notes
-  - Use formulas from the paper where relevant for better understanding.
-  - Notes should reference corresponding sections in the paper verbatim.
-  - Keep lessons concise, logical, and progressive.
-  - Ensure annotations are outside of the code to maintain clarity and focus on understanding through notes.
-  `;
-
+  `
+  
   const prompt = `You are an expert machine learning researcher and teacher. You have a paper and a repo. You should create a 5 lesson plan for me to go from where I am to understanding the key insights and implementation details of the paper.
 
   <MyCurrentProficiency>${currentProficiency}</MyCurrentProficiency>
@@ -188,13 +189,17 @@ async function main() {
 # General Guidelines:
 - Ensure that the notes reference relevant sections of the paper so that the user understands the paper while going through the code. Use formulas from the paper in the notes.
 - Use github flavored markdown for the notes since it supports mermaid diagrams, mathjax, and other features. (Use them!)
-- Avoid large chunks of code or notes. No code block sgould be more than 5-10 lines long. Break them down into smaller blocks.
+- Avoid large chunks of code or notes. No code block should be more than 5-10 lines long. Break them down into smaller blocks.
 - Do not put explanations in the code or code comments. The notes should explain the code.
   `;
+
+
+
   const chatCompletion = await client.chat.completions.create({
     messages: [{ role: "user", content: oai_auto_prompt }],
-    model: "o1-preview-2024-09-12",
+    model: "o1-mini-2024-09-12",
   });
+  console.log(JSON.stringify(chatCompletion.usage))
   console.log(chatCompletion.choices[0].message.content);
 }
 

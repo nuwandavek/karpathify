@@ -12,7 +12,7 @@ import 'katex/dist/katex.min.css';
 
 SyntaxHighlighter.registerLanguage('python', python);
 
-import dataFile from '../../../backend/examples/example_vivek_3b.json'
+import dataFile from '../../../backend/examples/example_vivek_4.json'
 
 const lessons: Lesson[] = dataFile
 
