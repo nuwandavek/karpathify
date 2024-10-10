@@ -353,9 +353,9 @@ From the paper:
 
 ### Mean Absolute Error (MAE)
 
-\[
+$$
 \mathcal{L}_{\text{MAE}}(C, \hat{C}) = \frac{1}{N} \sum_{i=1}^N |C_i - \hat{C}_i|
-\]
+$$
 
 - \( C \): Predicted canonical inverse depth.
 - \( \hat{C} \): Ground truth canonical inverse depth.
@@ -365,21 +365,21 @@ From the paper:
 
 #### Mean Absolute Gradient Error (MAGE)
 
-\[
+$$
 \mathcal{L}_{\text{MAGE}} = \frac{1}{M} \sum_{j=1}^M \frac{1}{N_j} \sum_{i=1}^{N_j} \left| \nabla_S C_i^j - \nabla_S \hat{C}_i^j \right|
-\]
+$$
 
 #### Mean Absolute Laplace Error (MALE)
 
-\[
+$$
 \mathcal{L}_{\text{MALE}} = \frac{1}{M} \sum_{j=1}^M \frac{1}{N_j} \sum_{i=1}^{N_j} \left| \nabla_L C_i^j - \nabla_L \hat{C}_i^j \right|
-\]
+$$
 
 #### Mean Squared Gradient Error (MSGE)
 
-\[
+$$
 \mathcal{L}_{\text{MSGE}} = \frac{1}{M} \sum_{j=1}^M \frac{1}{N_j} \sum_{i=1}^{N_j} \left( \nabla_S C_i^j - \nabla_S \hat{C}_i^j \right)^2
-\]
+$$
 
 - \( M \): Number of scales.
 - \( \nabla_S \): Scharr operator.
@@ -497,9 +497,9 @@ From the paper:
 
 To determine if there's an occluding contour between neighboring pixels \( i \) and \( j \), we define:
 
-\[
+$$
 c_d(i, j) = \left[ \frac{d(j)}{d(i)} > 1 + \frac{t}{100} \right]
-\]
+$$
 
 Where:
 - \( d(i) \): Depth at pixel \( i \).
@@ -510,18 +510,18 @@ Where:
 - **Precision (\( P \))**: The proportion of predicted boundaries that are correct.
 - **Recall (\( R \))**: The proportion of true boundaries that are detected.
 
-\[
+$$
 P(t) = \frac{\sum_{i,j} c_d(i,j) \wedge c_{\hat{d}}(i,j)}{\sum_{i,j} c_d(i,j)} \\
 R(t) = \frac{\sum_{i,j} c_d(i,j) \wedge c_{\hat{d}}(i,j)}{\sum_{i,j} c_{\hat{d}}(i,j)}
-\]
+$$
 
 ### Boundary F1 Score
 
 The harmonic mean of precision and recall:
 
-\[
+$$
 F1 = 2 \times \frac{P \times R}{P + R}
-\]
+$$
 
 ---
 
@@ -713,9 +713,9 @@ fov_value = fov.item()
 - **Canonical Inverse Depth**: The model outputs canonical inverse depth.
 - **Conversion to Metric Depth**:
 
-\[
+$$
 D_{\text{metric}} = \frac{f_{\text{pixels}}}{w} \times C
-\]
+$$
 
 - \( f_{\text{pixels}} \): Focal length in pixels.
 - \( w \): Image width in pixels.
@@ -723,9 +723,9 @@ D_{\text{metric}} = \frac{f_{\text{pixels}}}{w} \times C
 
 - **Calculating Focal Length in Pixels**:
 
-\[
+$$
 f_{\text{pixels}} = \frac{0.5 \times w}{\tan(0.5 \times \text{FoV (in radians)})}
-\]
+$$
 
 ---
 
