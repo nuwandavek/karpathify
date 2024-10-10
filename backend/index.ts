@@ -118,7 +118,7 @@ function markdownToIPythonNotebook(markdownFilePath, outputNotebookPath) {
               notebookCells.push({
                   cell_type: 'markdown',
                   metadata: {},
-                  source: segment.split('\n'),
+                  source: segment.split('\n\n'),
               });
           }
       } else {
@@ -128,7 +128,7 @@ function markdownToIPythonNotebook(markdownFilePath, outputNotebookPath) {
               execution_count: null,
               metadata: {},
               outputs: [],
-              source: segment.split('\n'),
+              source: segment.split('\n\n'),
           });
       }
   });
@@ -326,6 +326,6 @@ async function main() {
 // console.log(jsonToMarkdown(example))
 // processJSONDirectory("./examples");
 // processJSONDirectory("./examples");
-// markdownToIPythonNotebook('./examples/example_12.md', './examples/example_12.ipynb');
+markdownToIPythonNotebook('./examples/example_12.md', './examples/example_13.ipynb');
 // console.log(getJSONFromMDFile('./examples/example_12.md'))
-splitMarkdownFileIntoLessons('./examples/example_12.md', './examples/example_12.json');
+// splitMarkdownFileIntoLessons('./examples/example_12.md', './examples/example_12.json');
