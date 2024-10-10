@@ -230,34 +230,46 @@ function markdownToCustomJson(markdown) {
   return { lessons };
 }
 
-function splitMarkdownFileIntoLessons(markdownFile, outputJSONFile) {
-  const markdown = readMarkdownFile(markdownFile);
-  // Split the markdown content by lesson headers
-  const lessons = markdown.split(/(?=^# Lesson \d+:)/gm);
+function splitMarkdownIntoLessons(markdown) {
+  // Split the markdown content by the lesson headers
+  const lessonRegex = /(^# Lesson \d+:.*$)/gm;
+  const lessonMatches = [...markdown.matchAll(lessonRegex)];
+
   let parts = [];
 
-  lessons.forEach((lesson, index) => {
-      // If it's the first part (before Lesson 1), store it as an introduction or setup
-      if (index === 0 && lesson.trim()) {
+  // Add introduction part (everything before the first lesson)
+  if (lessonMatches.length > 0) {
+      const introContent = markdown.slice(0, lessonMatches[0].index).trim();
+      if (introContent) {
           parts.push({
               partTitle: "Introduction",
-              content: lesson.trim(),
-          });
-      } else {
-          // For each lesson, split the content by sections within that lesson
-          const lessonParts = lesson.split(/(?=^---)/gm).map((part) => part.trim());
-          const lessonTitle = lesson.match(/^# Lesson \d+: (.*)$/m)[1];
-          
-          // Push the lesson content part into the array
-          lessonParts.forEach((part, idx) => {
-              parts.push({
-                  partTitle: idx === 0 ? lessonTitle : `${lessonTitle} - Part ${idx + 1}`,
-                  content: part,
-              });
+              content: introContent,
           });
       }
-  });
 
+      // Process each lesson
+      lessonMatches.forEach((match, index) => {
+          const lessonTitle = match[0];
+          const lessonStart = match.index;
+          const lessonEnd = index < lessonMatches.length - 1
+              ? lessonMatches[index + 1].index
+              : markdown.length;
+
+          const lessonContent = markdown.slice(lessonStart, lessonEnd).trim();
+
+          parts.push({
+              partTitle: lessonTitle.replace(/^# /, ''), // Remove the '# ' from the title
+              content: lessonContent,
+          });
+      });
+  }
+
+  return parts;
+}
+
+function splitMarkdownFileIntoLessons(markdownFile, outputJSONFile) {
+  const markdown = readMarkdownFile(markdownFile);
+  const parts = splitMarkdownIntoLessons(markdown)
   fs.writeFileSync(outputJSONFile, JSON.stringify(parts), "utf-8");
 }
 
