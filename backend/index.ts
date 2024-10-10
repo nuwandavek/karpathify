@@ -108,6 +108,8 @@ Instructions:
 - Each lesson needs to build upon the previous lesson in complexity and length.
 - Output a json file containing an array of lessons. Each lesson should have a title, a brief description, and an array of objects containing 2 keys: "code" and "notes". The "code" key should contain the code block, and the "notes" key should contain any notes as Markdown.
 - Keep in mind that the code and notes will be rendered side by side in the final output for each lesson.
+- Ensure that the notes reference relevant sections of the paper so that the user understands the paper while going through the code.
+- Use github flavored markdown for the notes since it supports mermaid diagrams, mathjax, and other features.
 
   <Repo>${repoState}</Repo>
   <Paper>${paper}</Paper>
