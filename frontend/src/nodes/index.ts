@@ -1,6 +1,6 @@
 import { NodeTypes, Position } from '@xyflow/react';
 
-import { NotebookNode } from './NotebookNode';
+import { NotebookMarkdownNode } from './NotebookNode';
 import { AppNode } from './types';
 
 const numLessons = 5;
@@ -36,6 +36,6 @@ initialNodes.push({
 
 
 export const nodeTypes = {
-  'notebook': NotebookNode,
+  'notebook': NotebookMarkdownNode,
   // Add any of your custom nodes here!
 } satisfies NodeTypes;

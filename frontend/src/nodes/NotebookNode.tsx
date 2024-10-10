@@ -10,11 +10,12 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 
+
 SyntaxHighlighter.registerLanguage('python', python);
 
-import dataFile from '../../../backend/examples/example_vivek_4.json'
+import dataFile from '../../../backend/examples/example_12.json'
+const parts = dataFile;
 
-const lessons: Lesson[] = dataFile
 
 const Block = ({ code, notes }: CodeBlock) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -58,6 +59,27 @@ export function NotebookNode({data}: NodeProps<NotebookNode>) {
           <Block key={idx} code={block.code} notes={block.notes} />
         ))
       }
+      <Handle type="source" position={Position.Right} />
+      <Handle type="target" position={Position.Left} />
+    </div>
+  );
+}
+
+
+export function NotebookMarkdownNode({data}: NodeProps<NotebookNode>) {
+  return (
+    <div className="react-flow__node-default nowheel" style={{
+      width: '100%',
+      maxWidth: "1000px",
+      display: 'flex',
+      flexDirection: 'column',
+      // alignItems: 'center',
+    }}>
+      <Markdown
+        remarkPlugins={[remarkMath]}
+        rehypePlugins={[rehypeKatex]}>
+          {parts[data.lessonIdx].content}
+        </Markdown>
       <Handle type="source" position={Position.Right} />
       <Handle type="target" position={Position.Left} />
     </div>

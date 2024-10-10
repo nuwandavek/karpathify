@@ -1,7 +1,8 @@
 import type { Node, BuiltInNode } from '@xyflow/react';
 
 export type NotebookNode = Node<{ lessonIdx: number }, 'notebook'>;
-export type AppNode = BuiltInNode | NotebookNode;
+export type NotebookMarkdownNode = Node<{ lessonIdx: number }, 'notebook'>;
+export type AppNode = BuiltInNode | NotebookNode | NotebookMarkdownNode;
 
 
 export interface CodeBlock {
