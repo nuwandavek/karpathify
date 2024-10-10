@@ -1,0 +1,146 @@
+{
+  "lessons": [
+    {
+      "title": "Lesson 1: Introduction to Monocular Depth Estimation with Vision Transformers",
+      "description": "In this lesson, we'll introduce monocular depth estimation and how Vision Transformers (ViTs) can be used for dense prediction tasks.",
+      "content": [
+        {
+          "code": "import torch\nfrom torchvision import transforms\nfrom PIL import Image",
+          "notes": "We start by importing the necessary libraries for handling images and tensors."
+        },
+        {
+          "code": "image = Image.open('path_to_image.jpg')\ntransform = transforms.Compose([\n    transforms.Resize((384, 384)),\n    transforms.ToTensor(),\n    transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])\n])\ninput_tensor = transform(image).unsqueeze(0)",
+          "notes": "Load an image and preprocess it to fit the input requirements of a Vision Transformer (ViT). We resize the image to 384x384 and normalize it."
+        },
+        {
+          "code": "from timm import create_model\n\nvit_model = create_model('vit_base_patch16_384', pretrained=True)\nvit_model.eval()",
+          "notes": "We load a pre-trained ViT model using the `timm` library. The model is set to evaluation mode. This ViT model will serve as our backbone for feature extraction."
+        },
+        {
+          "code": "with torch.no_grad():\n    features = vit_model.forward_features(input_tensor)",
+          "notes": "Extract features from the input image using the ViT model. This step outputs a feature map that will be used for depth estimation."
+        },
+        {
+          "code": "print(features.shape)",
+          "notes": "Inspect the shape of the extracted features. Understanding the feature dimensions is crucial for building subsequent layers."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 2: Building a Multi-Scale ViT Encoder",
+      "description": "In this lesson, we'll build a multi-scale encoder that processes the image at multiple scales to capture both global context and fine details.",
+      "content": [
+        {
+          "code": "def create_pyramid(image, scales):\n    return [image.resize((int(image.width * scale), int(image.height * scale))) for scale in scales]",
+          "notes": "Define a function to create an image pyramid at different scales. This helps in processing the image at various resolutions."
+        },
+        {
+          "code": "scales = [1.0, 0.5, 0.25]\nimage_pyramid = create_pyramid(image, scales)",
+          "notes": "Create an image pyramid using the defined scales. This will generate multiple versions of the image at different resolutions."
+        },
+        {
+          "code": "inputs = [transform(im).unsqueeze(0) for im in image_pyramid]",
+          "notes": "Preprocess each image in the pyramid to create input tensors suitable for the ViT model."
+        },
+        {
+          "code": "with torch.no_grad():\n    features_list = [vit_model.forward_features(inp) for inp in inputs]",
+          "notes": "Pass each scaled image through the ViT model to extract features at multiple scales, capturing both global context and local details."
+        },
+        {
+          "code": "for idx, features in enumerate(features_list):\n    print(f\"Scale {scales[idx]}: features shape {features.shape}\")",
+          "notes": "Print out the shape of the features at each scale to understand how the resolution affects the feature dimensions."
+        },
+        {
+          "code": "# Upsample or downsample features as needed\ndef resize_features(features, target_size):\n    return torch.nn.functional.interpolate(features, size=target_size, mode='bilinear', align_corners=False)",
+          "notes": "Define a function to resize feature maps to a common spatial resolution for further processing."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 3: Implementing the Decoder and Depth Prediction Head",
+      "description": "This lesson focuses on decoding the multi-scale features and implementing the depth prediction head to generate the depth map.",
+      "content": [
+        {
+          "code": "class FeatureFusionModule(torch.nn.Module):\n    def __init__(self, input_channels):\n        super().__init__()\n        self.conv1 = torch.nn.Conv2d(input_channels, input_channels, kernel_size=3, padding=1)\n        self.relu = torch.nn.ReLU()\n        self.conv2 = torch.nn.Conv2d(input_channels, input_channels, kernel_size=3, padding=1)\n    \n    def forward(self, x_high, x_low):\n        x_low_upsampled = torch.nn.functional.interpolate(x_low, size=x_high.shape[-2:], mode='bilinear', align_corners=False)\n        x = x_high + x_low_upsampled\n        x = self.conv1(x)\n        x = self.relu(x)\n        x = self.conv2(x)\n        return x",
+          "notes": "Implement a simple feature fusion module that combines features from different scales. This is inspired by the decoder architecture described in Section 3.1 of the paper."
+        },
+        {
+          "code": "decoder = FeatureFusionModule(input_channels=768)",
+          "notes": "Initialize the decoder with the appropriate number of input channels matching the ViT model's output."
+        },
+        {
+          "code": "fused_features = decoder(features_list[0], features_list[1])",
+          "notes": "Fuse features from the highest and mid-level scales. This combines global context with local details."
+        },
+        {
+          "code": "depth_head = torch.nn.Sequential(\n    torch.nn.Conv2d(768, 256, kernel_size=3, padding=1),\n    torch.nn.ReLU(),\n    torch.nn.Conv2d(256, 1, kernel_size=1)\n)",
+          "notes": "Define the depth prediction head that converts fused features into a single-channel depth map."
+        },
+        {
+          "code": "depth_map = depth_head(fused_features)",
+          "notes": "Generate the depth map by passing the fused features through the depth prediction head."
+        },
+        {
+          "code": "print(f\"Depth map shape: {depth_map.shape}\")",
+          "notes": "Verify the dimensions of the predicted depth map."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 4: Training with Boundary-Aware Loss Functions",
+      "description": "In this lesson, we'll implement loss functions that focus on producing sharp depth boundaries, enhancing edge details in the depth map.",
+      "content": [
+        {
+          "code": "def gradient_x(img):\n    gx = img[:, :, :, :-1] - img[:, :, :, 1:]\n    return gx",
+          "notes": "Compute the gradient of the depth map in the x-direction. This helps in capturing horizontal edge information."
+        },
+        {
+          "code": "def gradient_y(img):\n    gy = img[:, :, :-1, :] - img[:, :, 1:, :]\n    return gy",
+          "notes": "Compute the gradient of the depth map in the y-direction to capture vertical edge information."
+        },
+        {
+          "code": "def depth_smoothness_loss(predicted_depth, image):\n    pred_dx = gradient_x(predicted_depth)\n    pred_dy = gradient_y(predicted_depth)\n    img_dx = gradient_x(image)\n    img_dy = gradient_y(image)\n    weights_x = torch.exp(-torch.mean(torch.abs(img_dx), 1, keepdim=True))\n    weights_y = torch.exp(-torch.mean(torch.abs(img_dy), 1, keepdim=True))\n    smoothness_x = pred_dx * weights_x\n    smoothness_y = pred_dy * weights_y\n    return smoothness_x.abs().mean() + smoothness_y.abs().mean()",
+          "notes": "Implement a depth smoothness loss function that penalizes depth gradients weighted by image gradients, as discussed in Section 3.2 of the paper. This encourages the depth map to have sharp edges aligned with image edges."
+        },
+        {
+          "code": "def laplacian_loss(predicted_depth, target_depth):\n    laplace_kernel = torch.tensor([[0, 1, 0], [1, -4, 1], [0, 1, 0]]).unsqueeze(0).unsqueeze(0).to(predicted_depth.device)\n    pred_laplace = torch.nn.functional.conv2d(predicted_depth, laplace_kernel, padding=1)\n    target_laplace = torch.nn.functional.conv2d(target_depth, laplace_kernel, padding=1)\n    return torch.mean((pred_laplace - target_laplace) ** 2)",
+          "notes": "Define a Laplacian loss to enforce second-order smoothness in the depth predictions, helping to preserve fine details and sharp edges."
+        },
+        {
+          "code": "# Example usage during training\nloss = depth_smoothness_loss(depth_map, input_tensor) + laplacian_loss(depth_map, ground_truth_depth)",
+          "notes": "Combine the smoothness and Laplacian losses to train the network. This encourages the model to produce depth maps with sharp boundaries and fine details."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 5: Implementing Boundary Evaluation Metrics and Focal Length Estimation",
+      "description": "In the final lesson, we'll implement evaluation metrics for boundary accuracy and add a focal length estimation module to predict focal length from the image.",
+      "content": [
+        {
+          "code": "def boundary_precision_recall(predicted_depth, ground_truth_depth, threshold):\n    depth_edges = torch.abs(torch.nn.functional.conv2d(predicted_depth, laplace_kernel, padding=1)) > threshold\n    gt_edges = torch.abs(torch.nn.functional.conv2d(ground_truth_depth, laplace_kernel, padding=1)) > threshold\n    true_positives = (depth_edges & gt_edges).float().sum()\n    predicted_positives = depth_edges.float().sum()\n    actual_positives = gt_edges.float().sum()\n    precision = true_positives / (predicted_positives + 1e-6)\n    recall = true_positives / (actual_positives + 1e-6)\n    return precision, recall",
+          "notes": "Implement precision and recall calculation for depth boundaries. This metric evaluates how well the predicted depth edges align with the ground truth, as introduced in Section 3.2."
+        },
+        {
+          "code": "precision, recall = boundary_precision_recall(depth_map, ground_truth_depth, threshold=0.1)\nprint(f\"Boundary Precision: {precision.item():.4f}, Recall: {recall.item():.4f}\")",
+          "notes": "Compute and display the boundary precision and recall values."
+        },
+        {
+          "code": "class FOVEstimator(torch.nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.encoder = vit_model  # Use the same ViT encoder\n        self.fc = torch.nn.Linear(768, 1)\n    \n    def forward(self, x):\n        features = self.encoder.forward_features(x)\n        global_feature = features.mean(dim=1)  # Global average pooling\n        fov = self.fc(global_feature)\n        return fov",
+          "notes": "Implement a focal length (Field of View) estimator using the ViT encoder. This module predicts the focal length from the image itself, as described in Section 3.3."
+        },
+        {
+          "code": "fov_estimator = FOVEstimator()\nfov = fov_estimator(input_tensor)\nprint(f\"Estimated FOV (degrees): {fov.item():.2f}\")",
+          "notes": "Estimate the field of view from the input image. This value can be used to scale the depth predictions appropriately."
+        },
+        {
+          "code": "def metric_depth(canonical_inverse_depth, fov, image_width):\n    focal_length = 0.5 * image_width / torch.tan(0.5 * torch.deg2rad(fov))\n    depth = focal_length / canonical_inverse_depth\n    return depth",
+          "notes": "Convert the canonical inverse depth map to metric depth using the estimated focal length and the image width, following the equation from Section 3.3: $$D_m = \\frac{f_{px}}{w \\cdot C}$$"
+        },
+        {
+          "code": "metric_depth_map = metric_depth(1 / depth_map, fov, image_width=input_tensor.shape[-1])",
+          "notes": "Compute the metric depth map using the estimated FOV and the canonical inverse depth map."
+        }
+      ]
+    }
+  ]
+}

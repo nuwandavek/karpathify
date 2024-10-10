@@ -2,7 +2,7 @@ import "dotenv/config";
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
-import example9 from './examples/example9.json'
+import example from './examples/example10.json'
 
 const client = new OpenAI({
   apiKey: process.env["OPENAI_API_KEY"], // This is the default and can be omitted
@@ -97,21 +97,22 @@ async function main() {
   const paper = fs.readFileSync("./docs/depth-pro.txt", "utf-8");
   const currentProficiency = "I understand calculus, python, pytorch";
 
-  const prompt = `
-  The user needs to understand a programming project and accompanying paper.
+  const prompt = `<Objective>I need to understand this paper and accompanying repository</Objective>
 
 Instructions:
-- Go through the repo, and give me a 5 lesson plan to learn this. The plan needs to be centered around 5 python programs.
-- Each lesson needs to introduce 1 or 2 a specific concepts in the file, and have code related to that. Also give a brief note explaining the concept clearly.
+- Go through the paper and the repo, and give me a 5 lesson plan to learn the most important insights from the paper.
+- I want you to break this essential information into 5 lessons, each building on the previous one, building up in complexity.
+- Each lesson needs to introduce 1 or 2 specific concepts using code. Also give a brief note explaining the concept & code clearly.
 - Each lesson needs to build upon the previous lesson in complexity and length.
 - Output a json file containing an array of lessons. Each lesson should have a title, a brief description, and an array of objects containing 2 keys: "code" and "notes". The "code" key should contain the code block, and the "notes" key should contain any notes as Markdown.
 - Ensure that the notes reference relevant sections of the paper so that the user understands the paper while going through the code. Use formulas from the paper in the notes.
 - Use github flavored markdown for the notes since it supports mermaid diagrams, mathjax, and other features. (Use them!)
 - Avoid large chunks of code or notes. Break a lesson into a large number of small steps.
 - Do not put explanations in the code or code comments. The notes should explain the code.
+- Verify that the lessons are building up in complexity and length and fully explain the crucial insights from the paper.
 
-  <Repo>${repoState}</Repo>
   <Paper>${paper}</Paper>
+  <Repo>${repoState}</Repo>
 ${currentProficiency}`;
   const chatCompletion = await client.chat.completions.create({
     messages: [{ role: "user", content: prompt }],
@@ -120,5 +121,5 @@ ${currentProficiency}`;
   console.log(chatCompletion.choices[0].message.content);
 }
 
-// main()
-console.log(jsonToMarkdown(example9))
+main()
+// console.log(jsonToMarkdown(example))
