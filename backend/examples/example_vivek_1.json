@@ -1,0 +1,102 @@
+{
+  "lessons": [
+    {
+      "title": "Lesson 1: Introduction to Monocular Depth Estimation and Depth Pro",
+      "description": "In this lesson, you will learn the fundamentals of monocular depth estimation and get an overview of the Depth Pro model's capabilities.",
+      "content": [
+        {
+          "code": "from depth_pro import create_model_and_transforms\nimport torch\n\n# Initialize device\ndevice = torch.device('cuda' if torch.cuda.is_available() else 'cpu')\n\n# Create model and transformation pipeline\nmodel, transform = create_model_and_transforms(device=device)\n\n# Switch model to evaluation mode\nmodel.eval()",
+          "notes": "# Initialization of Depth Pro Model\n\nTo begin, we import the necessary modules and initialize the Depth Pro model along with the required transformations.\n\n- **Lines 1-2**: Import the `create_model_and_transforms` function from the Depth Pro package and `torch`.\n- **Line 5**: Set up the computation device (GPU if available, else CPU).\n- **Lines 8-10**: Use the `create_model_and_transforms` function to instantiate the model and the image transformation pipeline. The function sets up the Depth Pro model with predefined configurations as described in the paper's Section 3.\n- **Line 13**: Set the model to evaluation mode with `model.eval()`.\n\nThis setup allows us to use the Depth Pro model for inference on input images.\n"
+        },
+        {
+          "code": "from PIL import Image\n\n# Load an image\nimage = Image.open('your_image.jpg').convert('RGB')\n\n# Apply transformations\ninput_tensor = transform(image).unsqueeze(0).to(device)",
+          "notes": "# Preparing Input Image\n\nHere, we load and preprocess an input image for the Depth Pro model.\n\n- **Line 1**: Import the `Image` module from PIL for image handling.\n- **Line 4**: Load your image and ensure it's in RGB format.\n- **Line 7**: Apply the transformation pipeline to the image. The transformations include resizing, normalization, and conversion to a tensor suitable for the model. We also add a batch dimension with `unsqueeze(0)` and move the tensor to the computation device.\n\nThis prepares the image for depth estimation using the Depth Pro model.\n"
+        },
+        {
+          "code": "# Perform inference\nwith torch.no_grad():\n    output = model.infer(input_tensor)\n\n# Extract depth map\ndepth_map = output['depth'].cpu().squeeze().numpy()",
+          "notes": "# Performing Depth Estimation\n\nWe use the Depth Pro model to estimate the depth map of the input image.\n\n- **Line 2**: Use a `torch.no_grad()` context to disable gradient calculations during inference.\n- **Line 3**: Call the `infer` method of the model with the input tensor.\n- **Line 6**: Extract the depth map from the output dictionary and convert it to a NumPy array for further processing or visualization.\n\nAt this point, `depth_map` contains the estimated depth information for the input image.\n\nAccording to Section 1 of the paper, Depth Pro produces high-resolution depth maps with sharp boundaries and fine details, making it suitable for various applications such as novel view synthesis and image editing.\n"
+        },
+        {
+          "code": "import matplotlib.pyplot as plt\n\n# Visualize the depth map\nplt.imshow(depth_map, cmap='inferno')\nplt.title('Estimated Depth Map')\nplt.axis('off')\nplt.show()",
+          "notes": "# Visualizing the Estimated Depth Map\n\nFinally, we visualize the depth map using Matplotlib.\n\n- **Line 1**: Import Matplotlib for plotting.\n- **Line 4**: Display the depth map using a colormap that highlights depth variations.\n- **Lines 5-7**: Add a title, remove axes, and display the plot.\n\nThis visualization helps us appreciate the quality of the depth estimation produced by Depth Pro, showcasing its ability to capture fine-grained details as highlighted in the paper's Figure 1.\n"
+        }
+      ]
+    },
+    {
+      "title": "Lesson 2: Multi-Scale Vision Transformer Architecture",
+      "description": "In this lesson, you will explore the multi-scale Vision Transformer (ViT) architecture used in Depth Pro and understand how it captures both global context and fine details.",
+      "content": [
+        {
+          "code": "# In depth_pro/network/encoder.py\n\nclass DepthProEncoder(nn.Module):\n    def __init__(self, dims_encoder, patch_encoder, image_encoder, hook_block_ids, decoder_features):\n        super().__init__()\n        self.dims_encoder = list(dims_encoder)\n        self.patch_encoder = patch_encoder\n        self.image_encoder = image_encoder\n        self.hook_block_ids = list(hook_block_ids)\n        # ... (initialization continues)",
+          "notes": "# DepthPro Encoder Initialization\n\nThe `DepthProEncoder` class is responsible for encoding input images at multiple scales using Vision Transformers, as described in Section 3.1 of the paper.\n\n- **Line 4**: The constructor (`__init__`) initializes the encoder with parameters such as the dimensions of encoder features, the patch and image encoders (both ViTs), the block IDs to hook for intermediate outputs, and the number of decoder features.\n- **Lines 5-9**: The superclass is initialized, and instance variables are set.\n\nThe multi-scale approach allows the model to process patches at different resolutions, capturing both global context and fine details.\n\n$$\n\\text{See Section 3.1: \"The key idea of our architecture is to apply plain ViT encoders on patches extracted at multiple scales and fuse the patch predictions into a single high-resolution dense prediction in an end-to-end trainable model.\"}\n$$\n"
+        },
+        {
+          "code": "def _create_pyramid(self, x):\n    x0 = x  # Original resolution\n    x1 = F.interpolate(x, scale_factor=0.5, mode='bilinear', align_corners=False)\n    x2 = F.interpolate(x, scale_factor=0.25, mode='bilinear', align_corners=False)\n    return x0, x1, x2",
+          "notes": "# Creating an Image Pyramid\n\nThe `_create_pyramid` method generates a 3-level image pyramid from the input image.\n\n- **Line 1**: Define the method `_create_pyramid`.\n- **Line 2**: `x0` is the original input image.\n- **Lines 3-4**: Downsample the image to half and quarter scales to obtain `x1` and `x2`.\n\nThis pyramid enables the model to process images at multiple scales, which is crucial for capturing details at different resolutions.\n\n$$\n\\text{Refer to Section 3.1: \"After downsampling to 1536×1536, the input image is split into patches of 384×384. For the two finest scales, we let patches overlap to avoid seams.\"}\n$$\n"
+        },
+        {
+          "code": "def split(self, x, overlap_ratio=0.25):\n    patch_size = 384\n    patch_stride = int(patch_size * (1 - overlap_ratio))\n    image_size = x.shape[-1]\n    steps = int(math.ceil((image_size - patch_size) / patch_stride)) + 1\n    x_patch_list = []\n    for j in range(steps):\n        for i in range(steps):\n            i0 = i * patch_stride\n            j0 = j * patch_stride\n            patch = x[..., j0:j0+patch_size, i0:i0+patch_size]\n            x_patch_list.append(patch)\n    return torch.cat(x_patch_list, dim=0)",
+          "notes": "# Splitting the Image into Overlapping Patches\n\nThe `split` method divides the image into overlapping patches.\n\n- **Line 1**: Define the `split` method with an `overlap_ratio` parameter.\n- **Lines 2-3**: Calculate the patch size and stride based on the overlap ratio.\n- **Lines 4-5**: Determine the number of steps needed to cover the image.\n- **Lines 7-12**: Loop over the image to extract patches and append them to a list.\n- **Line 13**: Concatenate all patches into a single tensor.\n\nOverlapping patches help the model avoid boundary artifacts and ensure seamless predictions across patches.\n\n$$\n\\text{From Section 3.1: \"At each scale, the patches are fed into the patch encoder, which produces a feature tensor... We merge the feature patches into maps.\"}\n$$\n"
+        },
+        {
+          "code": "def forward(self, x):\n    x0, x1, x2 = self._create_pyramid(x)\n    x0_patches = self.split(x0, overlap_ratio=0.25)\n    x1_patches = self.split(x1, overlap_ratio=0.5)\n    x2_patches = x2  # Low-resolution image\n    # Process patches with shared ViT encoder\n    x_pyramid_patches = torch.cat((x0_patches, x1_patches, x2_patches), dim=0)\n    x_pyramid_encodings = self.patch_encoder(x_pyramid_patches)\n    # ... (forward pass continues)",
+          "notes": "# Forward Pass of the Encoder\n\nThe `forward` method executes the encoding process.\n\n- **Line 1**: Define the `forward` method.\n- **Line 2**: Create the image pyramid.\n- **Lines 3-5**: Split images at different scales into patches.\n- **Line 7**: Combine all patches into one tensor.\n- **Line 8**: Process all patches through the shared patch encoder (ViT).\n\nThis step applies the Vision Transformer to patches from multiple scales, enabling the model to learn scale-invariant representations.\n\n$$\n\\text{According to Section 3.1: \"Intuitively, this may allow learning representations that are scale-invariant as weights are shared across scales.\"}\n$$\n"
+        }
+      ]
+    },
+    {
+      "title": "Lesson 3: Training Protocol and Loss Functions",
+      "description": "In this lesson, you will understand the training strategy of Depth Pro, focusing on the loss functions that promote sharp depth estimates.",
+      "content": [
+        {
+          "code": "# In depth_pro/depth_pro.py\n\ndef forward(self, x):\n    # ... (encoder and decoder forward pass)\n    canonical_inverse_depth = self.head(features)\n    return canonical_inverse_depth",
+          "notes": "# Forward Method in Depth Pro Model\n\nThe `forward` method computes the canonical inverse depth.\n\n- **Line 3**: After encoding and decoding, pass the features through the `self.head` to obtain `canonical_inverse_depth`.\n- **Line 4**: Return the canonical inverse depth map.\n\nThis output is used in the loss functions during training to compute errors with respect to ground truth.\n\n$$\nC = f(I) \\quad \\text{(Equation from Section 3.2)}\n$$\nwhere $C$ is the canonical inverse depth, $f$ is the model, and $I$ is the input image.\n"
+        },
+        {
+          "code": "# Loss functions in training\n\nL_MAE = torch.mean(torch.abs(C_pred - C_gt))\n\n# Multi-scale derivative loss\ndef multi_scale_derivative_loss(C_pred, C_gt, scales=[1,2,4,8]):\n    loss = 0\n    for scale in scales:\n        C_pred_scaled = F.avg_pool2d(C_pred, kernel_size=scale)\n        C_gt_scaled = F.avg_pool2d(C_gt, kernel_size=scale)\n        loss += torch.mean(torch.abs(gradient(C_pred_scaled) - gradient(C_gt_scaled)))\n    return loss",
+          "notes": "# Loss Functions Implementation\n\nThe training uses several loss functions to promote sharp and accurate depth predictions.\n\n- **Line 4**: Compute the Mean Absolute Error (MAE) between predicted and ground-truth canonical inverse depths.\n  $$\n  \\mathcal{L}_{\\mathit{MAE}}(\\hat{C}, C) = \\frac{1}{N} \\sum_{i=1}^N | \\hat{C}_i - C_i |\n  $$\n  (Refer to Equation 1 in Section 3.2)\n\n- **Lines 7-14**: Define a multi-scale derivative loss function.\n  - **Lines 9-12**: At each scale, downsample the predicted and ground-truth depths and compute the gradient difference.\n  - **Line 13**: Accumulate the loss across scales.\n  \nThese loss functions help the model learn fine details and sharp transitions in depth.\n\n$$\n\\text{Equation 2 in Section 3.2 defines the multi-scale derivative loss:}\n\\mathcal{L}_{*, p, M}(C, \\hat{C}) = \\frac{1}{M} \\sum_{j=1}^M \\frac{1}{N_j} \\sum_{i}^{N_j} | \\nabla_* C_i^j - \\nabla_* \\hat{C}_i^j |^p\n$$\nwhere $\\nabla_*$ represents spatial derivative operators.\n"
+        },
+        {
+          "code": "# Usage of loss functions during training\n\nloss = L_MAE + 0.1 * multi_scale_derivative_loss(C_pred, C_gt)\nloss.backward()",
+          "notes": "# Combining Loss Functions in Training\n\n- **Line 3**: Combine the MAE loss with the multi-scale derivative loss weighted by a factor (e.g., 0.1).\n- **Line 4**: Perform backpropagation with `loss.backward()`.\n\nThis demonstrates how multiple loss terms contribute to the overall training objective, encouraging both global accuracy and local detail preservation.\n\nRefer to the training curriculum described in Section 3.2:\n\n$$\n\\text{\"In the first stage, we aim to learn robust features... In the second stage of training, designed to sharpen boundaries...\"}\n$$\n"
+        }
+      ]
+    },
+    {
+      "title": "Lesson 4: Evaluating Boundary Accuracy in Depth Maps",
+      "description": "In this lesson, you will learn about the evaluation metrics for boundary accuracy in depth maps and how they are implemented using code.",
+      "content": [
+        {
+          "code": "# In depth_pro/eval/boundary_metrics.py\n\ndef SI_boundary_F1(predicted_depth, target_depth, t_min=1.05, t_max=1.25, N=10):\n    thresholds = np.linspace(t_min, t_max, N)\n    f1_scores = []\n    for t in thresholds:\n        f1 = boundary_f1(predicted_depth, target_depth, t)\n        f1_scores.append(f1)\n    return np.mean(f1_scores)",
+          "notes": "# Scale-Invariant Boundary F1 Score\n\nThe `SI_boundary_F1` function computes the boundary F1 score across multiple thresholds.\n\n- **Line 3**: Define thresholds between `t_min` and `t_max`.\n- **Lines 5-7**: For each threshold `t`, compute the boundary F1 score and collect the results.\n- **Line 8**: Return the average F1 score across thresholds.\n\nThis metric assesses the alignment of predicted depth boundaries with the ground truth, emphasizing sharpness and accuracy at object edges.\n\nRefer to Section 3.2 of the paper:\n\n$$\n\\text{\"We first define the metrics for depth maps... We then define an occluding contour...\"}\n$$\n"
+        },
+        {
+          "code": "def boundary_f1(pr, gt, t):\n    # Compute foreground-background relations\n    ap, bp, cp, dp = fgbg_depth(pr, t)\n    ag, bg, cg, dg = fgbg_depth(gt, t)\n    # Compute precision and recall\n    p = (np.sum(ap & ag) + np.sum(bp & bg) + np.sum(cp & cg) + np.sum(dp & dg)) / \\\n        (np.sum(ap) + np.sum(bp) + np.sum(cp) + np.sum(dp))\n    r = (np.sum(ap & ag) + np.sum(bp & bg) + np.sum(cp & cg) + np.sum(dp & dg)) / \\\n        (np.sum(ag) + np.sum(bg) + np.sum(cg) + np.sum(dg))\n    # Compute F1 score\n    if p + r == 0:\n        return 0\n    return 2 * p * r / (p + r)",
+          "notes": "# Computing Boundary F1 Score\n\nThe `boundary_f1` function calculates the F1 score for a given threshold.\n\n- **Line 2**: Compute foreground-background relations for predicted (`pr`) and ground-truth (`gt`) depths.\n- **Lines 4-7**: Calculate precision (`p`) and recall (`r`) based on overlaps of foreground-background relations.\n- **Lines 9-11**: Compute the F1 score, handling the case where both `p` and `r` are zero.\n\nThis function is critical for evaluating how well the model captures depth discontinuities at object boundaries.\n\nFrom Section 3.2:\n\n$$\n\\text{\"To evaluate boundary tracing in predicted depth maps, we use the pairwise depth ratio of neighboring pixels to define a foreground/background relationship.\"}\n$$\n"
+        },
+        {
+          "code": "# Example usage\npredicted_depth = ...  # Output from model\ntarget_depth = ...     # Ground truth depth\nf1_score = SI_boundary_F1(predicted_depth, target_depth)",
+          "notes": "# Applying the Boundary Metrics\n\n- **Lines 2-3**: Assume `predicted_depth` is the output from the model and `target_depth` is the ground truth.\n- **Line 4**: Compute the scale-invariant boundary F1 score.\n\nThis allows us to quantitatively assess the model's performance on preserving sharp boundaries in depth estimation.\n\nAs highlighted in Section 4:\n\n$$\n\\text{\"We find that Depth Pro produces more accurate boundaries than all baselines on all datasets, by a significant margin.\"}\n$$\n"
+        }
+      ]
+    },
+    {
+      "title": "Lesson 5: Zero-Shot Focal Length Estimation",
+      "description": "In the final lesson, you will understand how Depth Pro performs zero-shot focal length estimation from a single image and explore its implementation.",
+      "content": [
+        {
+          "code": "# In depth_pro/network/fov.py\n\nclass FOVNetwork(nn.Module):\n    def __init__(self, num_features, fov_encoder=None):\n        super().__init__()\n        # ... (other initializations)\n        self.head = nn.Sequential(\n            nn.Conv2d(num_features // 8, 1, kernel_size=6, stride=1, padding=0),\n        )",
+          "notes": "# Field of View Estimation Network\n\nThe `FOVNetwork` estimates the field of view (FoV) from image features.\n\n- **Line 4**: Constructor initializes the network.\n- **Lines 7-9**: Define the `self.head` as a sequence of convolutional layers ending with a single output channel representing the FoV.\n\nEstimating the FoV allows the model to compute metric depth without camera intrinsics.\n\nFrom Section 3.3:\n\n$$\n\\text{\"We supplement our network with a focal length estimation head... to predict the horizontal angular field-of-view.\"}\n$$\n"
+        },
+        {
+          "code": "def forward(self, x, lowres_feature):\n    x = lowres_feature\n    fov = self.head(x)\n    return fov",
+          "notes": "# Forward Method for FOV Estimation\n\n- **Line 1**: Define the `forward` method, taking image `x` and `lowres_feature` as inputs.\n- **Line 2**: Use the low-resolution feature map extracted from the encoder.\n- **Line 3**: Pass the features through the `self.head` to estimate the FoV.\n- **Line 4**: Return the estimated FoV.\n\nThis output is used to compute the focal length in pixels:\n\n$$\n\\text{From Section 3.3:}\nD_m = \\frac{f_{px}}{w C}\n$$\nwhere $D_m$ is the metric depth, $f_{px}$ is the focal length in pixels, $w$ is the image width, and $C$ is the canonical inverse depth.\n"
+        },
+        {
+          "code": "# In depth_pro/depth_pro.py\n\ndef infer(self, x, f_px=None):\n    # ... (forward pass to get canonical_inverse_depth and fov_deg)\n    if f_px is None:\n        f_px = 0.5 * W / torch.tan(0.5 * torch.deg2rad(fov_deg))\n    inverse_depth = canonical_inverse_depth * (W / f_px)\n    depth = 1.0 / inverse_depth\n    return {'depth': depth, 'focallength_px': f_px}",
+          "notes": "# Computing Metric Depth Without Known Intrinsics\n\n- **Line 3**: If `f_px` (focal length in pixels) is not provided, compute it from the estimated FoV.\n  - **Line 4**: Calculate `f_px` using the formula $f_{px} = \\frac{W}{2 \\tan(\\frac{\\text{FoV}}{2})}$.\n- **Line 5**: Adjust the inverse depth using the computed `f_px`.\n- **Line 6**: Obtain the metric depth by inverting the adjusted inverse depth.\n- **Line 8**: Return the depth map and focal length.\n\nThis demonstrates how Depth Pro estimates metric depth without relying on camera metadata, fulfilling the goal stated in the paper.\n\nFrom Section 3.3:\n\n$$\n\\text{\"If the focal length is given, it is used to estimate the final metric depth, otherwise the model estimates $f_{px}$ to compute the depth metricness.\"}\n$$\n"
+        }
+      ]
+    }
+  ]
+}

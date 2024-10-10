@@ -12,9 +12,9 @@ import 'katex/dist/katex.min.css';
 
 SyntaxHighlighter.registerLanguage('python', python);
 
-import dataFile from '../../../backend/examples/example10.json'
+import dataFile from '../../../backend/examples/example_vivek_3b.json'
 
-const lessons: Lesson[] = dataFile.lessons
+const lessons: Lesson[] = dataFile
 
 const Block = ({ code, notes }: CodeBlock) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -30,7 +30,8 @@ const Block = ({ code, notes }: CodeBlock) => {
       </div>
       <div style={{width: "50%", display: "flex", flexDirection: "column",
         justifyContent:"start", alignItems:"start", textAlign: "left", padding: "10px",
-        border: isHovered ? "1px solid #f1c40f" : "1px solid #eee", borderRadius: "5px", margin: "5px"}}>
+        border: isHovered ? "1px solid #f1c40f" : "1px solid #eee", borderRadius: "5px", margin: "5px",
+        overflow:"scroll"}}>
         <Markdown
         remarkPlugins={[remarkMath]}
         rehypePlugins={[rehypeKatex]}>

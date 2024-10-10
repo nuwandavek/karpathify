@@ -94,28 +94,71 @@ function jsonToMarkdown(jsonData) {
 
 async function main() {
   const repoState = JSON.stringify(readImportantFilesAsJson("./repo"));
-  const paper = fs.readFileSync("./docs/depth-pro.md", "utf-8");
-  const currentProficiency = "I understand calculus, python, pytorch";
+  const paper = fs.readFileSync("./docs/depth-pro_small.md", "utf-8");
+  const currentProficiency = "I understand calculus, python, pytorch. I have some basic experience with neural nets.";
 
-  const prompt = `<Objective>I need to understand this paper and accompanying repository</Objective>
+  const oai_auto_prompt = `You are an expert machine learning researcher and teacher like Andrej Karpathy. Create a 5 lesson plan to help the user understand the key insights and implementation details of a specific machine learning paper, based on their current proficiency, the paper itself, and the associated repository. 
 
-Instructions:
-- Go through the paper and the repo, and give me a 5 lesson plan to learn the most important insights from the paper.
-- I want you to break this essential information into 5 lessons, each building on the previous one, building up in complexity.
-- Each lesson needs to introduce 1 or 2 specific concepts using code. Also give a brief note explaining the concept & code clearly.
-- Each lesson needs to build upon the previous lesson in complexity and length.
-- Output a json file containing an array of lessons. Each lesson should have a title, a brief description, and an array of objects containing 2 keys: "code" and "notes". The "code" key should contain the code block, and the "notes" key should contain any notes as Markdown.
-- Ensure that the notes reference relevant sections of the paper so that the user understands the paper while going through the code. Use formulas from the paper in the notes.
-- Use github flavored markdown for the notes since it supports mermaid diagrams, mathjax, and other features. (Use them!)
-- Avoid large chunks of code or notes. Break a lesson into a large number of small steps.
-- Do not put explanations in the code or code comments. The notes should explain the code.
-- Verify that the lessons are building up in complexity and length and fully explain the crucial insights from the paper.
-
+  <MyCurrentProficiency>${currentProficiency}</MyCurrentProficiency>
   <Paper>${paper}</Paper>
   <Repo>${repoState}</Repo>
-${currentProficiency}`;
+
+  # Steps
+  
+  1. **Read and Understand the Paper**:
+     - Extract key insights from the paper.
+     - Place these insights within <PaperInsights> tags. 
+  
+  2. **Review the Repository**:
+     - Identify important code snippets relevant to the paper's insights.
+     - Ignore irrelevant code.
+     - Place significant code snippets within <ImportantCode> tags.
+  
+  3. **Develop Lesson Plan**:
+     - Divide the essential information from the paper and repository into 5 lessons.
+     - Put high level plan in <LessonPlan> tags.
+     - Lesson 1 must start from the user's current proficiency level.
+     - Each lesson introduces 1 or 2 specific concepts using the relevant code snippets. It builds on the previous lesson, increasing in complexity.
+     - Provide detailed notes explaining each concept and the associated code thoroughly.
+     - Ensure lesson 5 is almost all the code from <ImportantCode> tags and the key insights from the paper.
+     - Each lesson should have at least 5 code blocks and notes, with each code block not being more than 5-10 lines.
+  
+  # Output Format
+  - Produce a JSON file containing an array of lessons.
+  - Each lesson consists of:
+    - A title,
+    - A brief description,
+    - An array of objects each containing:
+      - "code": the relevant code block.
+      - "notes": explanatory notes in GitHub-Flavored Markdown.
+
+  # Notes
+  - Use formulas from the paper where relevant for better understanding.
+  - Notes should reference corresponding sections in the paper verbatim.
+  - Keep lessons concise, logical, and progressive.
+  - Ensure annotations are outside of the code to maintain clarity and focus on understanding through notes.
+  `
+  
+  const prompt = `You are an expert machine learning researcher and teacher. You have a paper and a repo. You should create a 5 lesson plan for me to go from where I am to understanding the key insights and implementation details of the paper.
+
+  <MyCurrentProficiency>${currentProficiency}</MyCurrentProficiency>
+  <Paper>${paper}</Paper>
+  <Repo>${repoState}</Repo>
+
+# Routine:
+1. Read the paper and understand the key insights. Put them in <PaperInsights> tags.
+2. Review the repo and understand the important code snippets, ignore the rest. Put them in <ImportantCode> tags.
+3. Break this essential information into 5 lessons, each building on the previous one, building up in complexity. Each lesson needs to introduce 1 or 2 specific concepts using the code. Give a detailed note explaining the concept & code clearly. The first lesson needs to start from where I am currently. The last lesson should end with me understanding the key insights and implementation details of the paper.
+4. Output a json file containing an array of lessons. Each lesson should have a title, a brief description, and an array of objects containing 2 keys: "code" and "notes". The "code" key should contain the code block, and the "notes" key should contain any notes as Markdown.
+
+# General Guidelines:
+- Ensure that the notes reference relevant sections of the paper so that the user understands the paper while going through the code. Use formulas from the paper in the notes.
+- Use github flavored markdown for the notes since it supports mermaid diagrams, mathjax, and other features. (Use them!)
+- Avoid large chunks of code or notes. No code block sgould be more than 5-10 lines long. Break them down into smaller blocks.
+- Do not put explanations in the code or code comments. The notes should explain the code.
+  `;
   const chatCompletion = await client.chat.completions.create({
-    messages: [{ role: "user", content: prompt }],
+    messages: [{ role: "user", content: oai_auto_prompt }],
     model: "o1-preview-2024-09-12",
   });
   console.log(chatCompletion.choices[0].message.content);
