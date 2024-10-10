@@ -80,8 +80,8 @@ Instructions:
 - The plan needs to be centered around 5 python programs
 - Each lesson needs to introduce 1 or 2 a specific concepts in the file, and have code related to that. Also give a brief note about the concept. Tell me what else I can read up to understand it.
 - Each lesson needs to build upon the previous lesson in complexity and length.
-- Output a markdown file with 5 different sections, each one containing one lesson.
-- Each lesson should have a clear code block. The markdown above the code will be displayed side by side with the code.
+- Output a json file containing an array of lessons. Each lesson should have a title, a brief description, and an array of objects containing 2 keys: "code" and "note". The "code" key should contain the code block, and the "note" key should contain the note.
+- Keep in mind that the code and note will be rendered side by side in the final output for each lesson.
 
   <Repo>${repoState}</Repo>
   <Paper>${paperMD}</Paper>
