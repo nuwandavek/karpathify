@@ -94,7 +94,7 @@ function jsonToMarkdown(jsonData) {
 
 async function main() {
   const repoState = JSON.stringify(readImportantFilesAsJson("./repo"));
-  const paper = fs.readFileSync("./docs/depth-pro.txt", "utf-8");
+  const paper = fs.readFileSync("./docs/depth-pro.md", "utf-8");
   const currentProficiency = "I understand calculus, python, pytorch";
 
   const prompt = `<Objective>I need to understand this paper and accompanying repository</Objective>
