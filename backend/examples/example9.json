@@ -1,0 +1,102 @@
+{
+  "lessons": [
+    {
+      "title": "Lesson 1: Understanding the Vision Transformer (ViT) Backbone",
+      "description": "In this lesson, you will learn about the Vision Transformer backbone used in DepthPro and how it is loaded and configured.",
+      "content": [
+        {
+          "code": "from depth_pro.network.vit_factory import create_vit\n\nvit_model = create_vit(preset='dinov2l16_384', use_pretrained=False)",
+          "notes": "### Loading the ViT Backbone\n\nWe start by importing the `create_vit` function from `vit_factory.py`. This function helps us create and load a ViT backbone module configured according to a preset.\n\nThe Vision Transformer (ViT) is a key component in the DepthPro model, providing powerful feature extraction capabilities by leveraging self-attention mechanisms. See **Section 3.1** of the paper for more details on the ViT backbone.\n\nWe create a ViT model using the `'dinov2l16_384'` preset, without loading pretrained weights."
+        },
+        {
+          "code": "vit_model.forward = vit_model.forward_features",
+          "notes": "### Adjusting the Forward Method\n\nWe set the `forward` method of the ViT model to be `forward_features`. This ensures that when we call `vit_model(input)`, it returns the features extracted by the backbone."
+        },
+        {
+          "code": "img_size = (384, 384)\n\nvit_model = resize_vit(vit_model, img_size=img_size)",
+          "notes": "### Resizing the ViT Model\n\nWe resize the ViT model to the desired image size of 384×384 pixels. This involves adjusting the positional embeddings to match the new image size, as described in the `resize_vit` function in `vit.py`."
+        },
+        {
+          "code": "patch_size = (16, 16)\n\nvit_model = resize_patch_embed(vit_model, new_patch_size=patch_size)",
+          "notes": "### Adjusting the Patch Embedding\n\nWe adjust the patch embedding size to 16×16 pixels using the `resize_patch_embed` function. This is important for matching the input resolution and ensuring that the model works correctly with the given patch size."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 2: Building the DepthProEncoder",
+      "description": "In this lesson, you will learn how the DepthProEncoder combines patch and image encoders to create multi-resolution encodings.",
+      "content": [
+        {
+          "code": "from depth_pro.network.encoder import DepthProEncoder\n\nencoder = DepthProEncoder(\n    dims_encoder=[256, 512, 1024, 1024],\n    patch_encoder=vit_model,\n    image_encoder=vit_model,\n    hook_block_ids=[5, 11],\n    decoder_features=256\n)",
+          "notes": "### Initializing DepthProEncoder\n\nWe import the `DepthProEncoder` class from `encoder.py` and create an instance of it. The encoder uses both a patch encoder and an image encoder (both using the ViT model), and combines their features to produce multi-resolution encodings.\n\n- `dims_encoder` specifies the expected dimensions at each level from the encoder.\n- `patch_encoder` and `image_encoder` are the ViT models we created earlier.\n- `hook_block_ids` are the indices of the ViT blocks where we will hook to get intermediate features.\n- `decoder_features` sets the number of features in the decoder.\n\nRefer to **Section 3.1** of the paper for details on how the encoder handles multi-scale feature extraction."
+        },
+        {
+          "code": "# Adding hooks to extract intermediate features\n\nvit_model.blocks[5].register_forward_hook(encoder._hook0)\nvit_model.blocks[11].register_forward_hook(encoder._hook1)",
+          "notes": "### Registering Forward Hooks\n\nWe register forward hooks on the ViT model's blocks to extract intermediate features during the forward pass. These features are captured in the encoder's `_hook0` and `_hook1` methods.\n\nThis allows the encoder to obtain features from specific layers of the ViT model, which are then used for multi-resolution encoding."
+        },
+        {
+          "code": "def forward(self, x: torch.Tensor) -> List[torch.Tensor]:\n    # Implementation of the forward method\n    encodings = self.encoder(x)\n    # Return list of encoded features\n    return encodings",
+          "notes": "### Understanding the Forward Method\n\nThe `forward` method of `DepthProEncoder` processes the input image to produce multi-resolution encodings.\n\nIt performs the following steps:\n\n1. **Image Pyramid Creation**: Creates a 3-level image pyramid with different resolutions.\n2. **Patch Extraction**: Splits images into overlapping patches at each scale.\n3. **Feature Extraction**: Processes the patches through the ViT encoder to obtain features.\n4. **Feature Merging**: Merges the features from patches back into feature maps.\n\nSee **Algorithm 1** in the paper for a high-level overview of the encoder's forward pass."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 3: Understanding the Multiresolution Decoder",
+      "description": "In this lesson, you will learn how the MultiresConvDecoder combines features from the encoder to produce high-resolution depth predictions.",
+      "content": [
+        {
+          "code": "from depth_pro.network.decoder import MultiresConvDecoder\n\ndecoder = MultiresConvDecoder(\n    dims_encoder=[256, 256, 512, 1024, 1024],\n    dim_decoder=256\n)",
+          "notes": "### Initializing MultiresConvDecoder\n\nWe import the `MultiresConvDecoder` from `decoder.py` and create an instance. The decoder is designed to fuse features from different resolutions and project them into a common feature space.\n\n- `dims_encoder` includes the decoder features followed by the encoder feature dimensions.\n- `dim_decoder` is the dimensionality of the decoder features.\n\nRefer to **Section 3.1** of the paper, particularly the section on the decoder architecture."
+        },
+        {
+          "code": "# Forward method\n\ndef forward(self, encodings: List[torch.Tensor]) -> torch.Tensor:\n    # Implementation of the forward method\n    features, lowres_features = self.decoder(encodings)\n    return features, lowres_features",
+          "notes": "### Decoding the Multi-Resolution Encodings\n\nThe `forward` method of the decoder takes the multi-resolution encodings from the encoder and processes them to produce the final features for depth prediction.\n\nIt uses convolutional layers and feature fusion blocks to combine the features from different resolutions. This is crucial for capturing both global context and fine details."
+        },
+        {
+          "code": "# FeatureFusionBlock2d class definition\n\nclass FeatureFusionBlock2d(nn.Module):\n    def __init__(self, num_features: int, deconv: bool = False, batch_norm: bool = False):\n        # Implementation...\n    \n    def forward(self, x0: torch.Tensor, x1: Optional[torch.Tensor] = None) -> torch.Tensor:\n        # Implementation...",
+          "notes": "### Feature Fusion Blocks\n\nThe `FeatureFusionBlock2d` class is used within the decoder to fuse features from different levels.\n\n- It includes residual blocks with convolutional layers.\n- It optionally performs upsampling (deconvolution) to align feature maps spatially.\n\nThis fusion process is described by the equation:\n\n$$\nF_i = \\text{Conv}(F_{i-1}) + \\text{Upsample}(F_i)\n$$\n\nSee **Equation (2)** in the paper, which describes the fusion process using residual connections and convolutional layers."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 4: Field of View (FOV) Estimation",
+      "description": "In this lesson, you will learn how the DepthPro model estimates the field of view using the FOVNetwork.",
+      "content": [
+        {
+          "code": "from depth_pro.network.fov import FOVNetwork\n\nfov_network = FOVNetwork(\n    num_features=256,\n    fov_encoder=vit_model\n)",
+          "notes": "### Initializing FOVNetwork\n\nWe import the `FOVNetwork` class from `fov.py` and create an instance. The FOVNetwork is responsible for estimating the field of view (FOV) from the input image and the features extracted by the encoder.\n\nThis is crucial for producing metric depth predictions without relying on provided camera intrinsics. Refer to **Section 3.3** in the paper for details on FOV estimation."
+        },
+        {
+          "code": "def forward(self, x: torch.Tensor, lowres_feature: torch.Tensor) -> torch.Tensor:\n    # Implementation of the forward method\n    fov_deg = self.head(features)\n    return fov_deg",
+          "notes": "### Understanding the FOV Estimation Process\n\nThe `forward` method of the `FOVNetwork` processes the input image and low-resolution features to predict the FOV.\n\n- It down-samples the input image and extracts features using an optional encoder.\n- It combines these features with the low-resolution features from the decoder.\n- The combined features are passed through convolutional layers to estimate the FOV in degrees.\n\nThis predicted FOV is then used to adjust the depth predictions accordingly."
+        },
+        {
+          "code": "# Focal length estimation formula\n\nf_px = 0.5 * W / torch.tan(0.5 * torch.deg2rad(fov_deg))",
+          "notes": "### Computing the Focal Length\n\nUsing the estimated FOV, we compute the focal length in pixels:\n\n$$\n f_{\\text{px}} = \\frac{W}{2 \\tan\\left(\\frac{\\text{FOV}_{\\text{deg}}}{2}\\right)}\n$$\n\nWhere:\n\n- ( W ) is the width of the image in pixels.\n- ( \\text{FOV}_{\\text{deg}} ) is the estimated field of view in degrees.\n\nSee **Equation (3)** in the paper for this formula."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 5: Putting It All Together: The DepthPro Model",
+      "description": "In this final lesson, you will see how the encoder, decoder, and FOV estimation are integrated into the DepthPro model for zero-shot metric monocular depth estimation.",
+      "content": [
+        {
+          "code": "from depth_pro.depth_pro import DepthPro\n\nmodel = DepthPro(\n    encoder=encoder,\n    decoder=decoder,\n    last_dims=(32, 1),\n    use_fov_head=True,\n    fov_encoder=vit_model\n)",
+          "notes": "### Initializing the DepthPro Model\n\nWe import the `DepthPro` class from `depth_pro.py` and create an instance, passing in the encoder, decoder, and FOV encoder.\n\n- `last_dims` specifies the dimensions for the final convolution layers.\n- `use_fov_head` is set to `True` to include FOV estimation.\n\nRefer to **Section 3** of the paper for an overview of the DepthPro model architecture."
+        },
+        {
+          "code": "def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:\n    # Implementation of the forward method\n    canonical_inverse_depth, fov_deg = self.forward(x)\n    return canonical_inverse_depth, fov_deg",
+          "notes": "### Understanding the Forward Pass\n\nThe `forward` method of `DepthPro` processes the input image through the encoder, decoder, and FOV network to produce the canonical inverse depth map and optionally the estimated FOV.\n\nThe depth predictions are adjusted using the estimated FOV to produce metric depth maps, as discussed in **Section 3.2** and **Section 3.3** of the paper."
+        },
+        {
+          "code": "def infer(self, x: torch.Tensor, f_px: Optional[float] = None) -> Mapping[str, torch.Tensor]:\n    # Implementation of the inference method\n    prediction = self.infer(x)\n    return prediction",
+          "notes": "### Inference Method\n\nThe `infer` method provides an easy interface to perform depth estimation on an input image, handling resizing and adjusting for the FOV.\n\n- If the focal length (`f_px`) is not provided, it uses the estimated FOV to compute it.\n- This allows the model to produce metric depth predictions without requiring camera intrinsics, fulfilling the goal stated in the paper."
+        },
+        {
+          "code": "# Example usage\n\nimage = ...  # Load an image tensor\n\nprediction = model.infer(image)\ndepth = prediction['depth']",
+          "notes": "### Using the DepthPro Model\n\nWe can now use the `infer` method to perform depth estimation on an input image. The output is a dictionary containing the depth map and optionally the focal length in pixels.\n\nThis demonstrates the end-to-end process of zero-shot monocular depth estimation with DepthPro."
+        }
+      ]
+    }
+  ]
+}

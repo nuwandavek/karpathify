@@ -2,7 +2,7 @@ import "dotenv/config";
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
-import example8 from './examples/example8.json'
+import example9 from './examples/example9.json'
 
 const client = new OpenAI({
   apiKey: process.env["OPENAI_API_KEY"], // This is the default and can be omitted
@@ -108,6 +108,7 @@ Instructions:
 - Ensure that the notes reference relevant sections of the paper so that the user understands the paper while going through the code. Use formulas from the paper in the notes.
 - Use github flavored markdown for the notes since it supports mermaid diagrams, mathjax, and other features. (Use them!)
 - Avoid large chunks of code or notes. Break a lesson into a large number of small steps.
+- Do not put explanations in the code or code comments. The notes should explain the code.
 
   <Repo>${repoState}</Repo>
   <Paper>${paper}</Paper>
@@ -120,4 +121,4 @@ ${currentProficiency}`;
 }
 
 // main()
-console.log(jsonToMarkdown(example8))
+console.log(jsonToMarkdown(example9))
