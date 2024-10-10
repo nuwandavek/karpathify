@@ -78,8 +78,8 @@ function jsonToMarkdown(jsonData) {
     // Add content (code and notes)
     lesson.content.forEach((content, idx) => {
       // Add note (if present)
-      if (content.note) {
-        markdown += `**Note:** ${content.note}\n\n`;
+      if (content.notes) {
+        markdown += `**Note:** ${content.notes}\n\n`;
       }
       if (content.code) {
         markdown += '```python\n'; // Assuming the code is in Python
