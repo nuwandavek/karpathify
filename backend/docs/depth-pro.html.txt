@@ -1,0 +1,803 @@
+Abstract
+We present a foundation model for zero-shot metric monocular depth estimation. Our model, Depth Pro, synthesizes high-resolution depth maps with unparalleled sharpness and high-frequency details. The predictions are metric, with absolute scale, without relying on the availability of metadata such as camera intrinsics. And the model is fast, producing a 2.25-megapixel depth map in 0.3 seconds on a standard GPU. These characteristics are enabled by a number of technical contributions, including an efficient multi-scale vision transformer for dense prediction, a training protocol that combines real and synthetic datasets to achieve high metric accuracy alongside fine boundary tracing, dedicated evaluation metrics for boundary accuracy in estimated depth maps, and state-of-the-art focal length estimation from a single image. Extensive experiments analyze specific design choices and demonstrate that Depth Pro outperforms prior work along multiple dimensions. We release code & weights at https://github.com/apple/ml-depth-pro
+
+1Introduction
+Input
+\begin{overpic}[height=79.49577pt]{fig/am2k/m_0aa9dd6a.jpg} \end{overpic}
+   
+ 	                                        
+Refer to caption
+   
+ 	
+Refer to caption
+   
+ 
+Depth Pro
+\begin{overpic}[height=79.49577pt]{fig/am2k/m_0aa9dd6a_depthpro_pv5i9yzjef.jpg% } \end{overpic}
+   
+ 	                                        
+Refer to caption
+   
+ 	
+Refer to caption
+   
+ 
+Marigold
+\begin{overpic}[height=79.49577pt]{fig/am2k/m_0aa9dd6a_marigold.jpg} \end{overpic}
+   
+ 	                                         
+Refer to caption
+   
+ 	
+Refer to caption
+   
+ 
+Depth Anything v2
+\begin{overpic}[height=79.49577pt]{fig/am2k/m_0aa9dd6a_depth_anything_v2_% relative.jpg} \end{overpic}
+   
+ 	                                        
+Refer to caption
+   
+ 	
+Refer to caption
+   
+ 
+Metric3D v2
+\begin{overpic}[height=79.49577pt]{fig/am2k/m_0aa9dd6a_metric3d_v2g.jpg} \end{overpic}
+   
+ 	                                         
+Refer to caption
+   
+ 	
+Refer to caption
+   
+ 
+Figure 1:Results on images from the AM-2k (Li et al., 2022a) (1st & 3rd column) and DIS-5k (Qin et al., 2022) (2nd column) datasets. Input image on top, estimated depth maps from Depth Pro, Marigold (Ke et al., 2024), Depth Anything v2 (Yang et al., 2024b), and Metric3D v2 (Hu et al., 2024) below. Depth Pro produces zero-shot metric depth maps with absolute scale at 2.25-megapixel native resolution in 0.3 seconds on a V100 GPU.
+Zero-shot monocular depth estimation underpins a growing variety of applications, such as advanced image editing, view synthesis, and conditional image generation. Inspired by MiDaS (Ranftl et al., 2022) and many follow-up works (Ranftl et al., 2021; Ke et al., 2024; Yang et al., 2024a; Piccinelli et al., 2024; Hu et al., 2024), applications increasingly leverage the ability to derive a dense pixelwise depth map for any image.
+
+Our work is motivated in particular by novel view synthesis from a single image, an exciting application that has been transformed by advances in monocular depth estimation (Hedman et al., 2017; Shih et al., 2020; Jampani et al., 2021; Khan et al., 2023). Applications such as view synthesis imply a number of desiderata for monocular depth estimation. First, the depth estimator should work zero-shot on any image, not restricted to a specific domain (Ranftl et al., 2022; Yang et al., 2024a). Furthermore, the method should ideally produce metric depth maps in this zero-shot regime, to accurately reproduce object shapes, scene layouts, and absolute scales (Guizilini et al., 2023; Hu et al., 2024). For the broadest applicability ‘in the wild’, the method should produce metric depth maps with absolute scale even if no camera intrinsics (such as focal length) are provided with the image (Piccinelli et al., 2024). This enables view synthesis scenarios such as “Synthesize a view of this scene from 63 mm away” for essentially arbitrary single images (Dodgson, 2004).
+
+Second, for the most compelling results, the monocular depth estimator should operate at high resolution and produce fine-grained depth maps that closely adhere to image details such as hair, fur, and other fine structures (Miangoleh et al., 2021; Ke et al., 2024; Li et al., 2024a). One benefit of producing sharp depth maps that accurately trace intricate details is the elimination of “flying pixels”, which can degrade image quality in applications such as view synthesis (Jampani et al., 2021).
+
+Third, for many interactive application scenarios, the depth estimator should operate at low latency, processing a high-resolution image in less than a second to support interactive view synthesis “queries” on demand. Low latency is a common characteristic of methods that reduce zero-shot monocular depth estimation to a single forward pass through a neural network (Ranftl et al., 2021; Yang et al., 2024a; Piccinelli et al., 2024),   but it is not always shared by methods that employ more computationally demanding machinery at test time (Ke et al., 2024; Li et al., 2024a).
+
+Refer to caption
+Refer to caption
+
+Figure 2:Boundary recall versus runtime. Depth Pro outperforms prior work by a multiplicative factor in boundary accuracy while being orders of magnitude faster than works focusing on fine-grained predictions (e.g., Marigold, PatchFusion).
+In this work, we present a foundation model for zero-shot metric monocular depth estimation that meets all of these desiderata. Our model, Depth Pro, produces metric depth maps with absolute scale on arbitrary images ‘in the wild’ without requiring metadata such as camera intrinsics. It operates at high resolution, producing 2.25-megapixel depth maps (with a native output resolution of 
+1536
+×
+1536
+ before optional further upsampling) in 0.3 seconds on a V100 GPU. Fig. 1 shows some representative results. Depth Pro dramatically outperforms all prior work in sharp delineation of object boundaries, including fine structures such as hair, fur, and vegetation. As shown in Fig. 2, Depth Pro offers unparalleled boundary tracing, outperforming all prior work by a multiplicative factor in boundary recall. (See Sec. 4 for additional detail.) Compared to the prior state of the art in boundary accuracy (Ke et al., 2024; Li et al., 2024a), Depth Pro is one to two orders of magnitude faster, yields much more accurate boundaries, and provides metric depth maps with absolute scale.
+
+Depth Pro is enabled by a number of technical contributions. First, we design an efficient multi-scale ViT-based architecture for capturing the global image context while also adhering to fine structures at high resolution. Second, we derive a new set of metrics that enable leveraging highly accurate matting datasets for quantifying the accuracy of boundary tracing in evaluating monocular depth maps. Third, we devise a set of loss functions and a training curriculum that promote sharp depth estimates while training on real-world datasets that provide coarse and inaccurate supervision around boundaries, along with synthetic datasets that offer accurate pixelwise ground truth but limited realism. Fourth, we contribute zero-shot focal length estimation from a single image that dramatically outperforms the prior state of the art.
+
+2Related work
+Early work on monocular depth estimation focused on training on individual datasets recorded with a single camera (Saxena et al., 2009; Eigen et al., 2014; Eigen & Fergus, 2015). Although this setup directly enabled metric depth predictions, it was limited to single datasets and narrow domains.
+
+Zero-shot depth estimation. MegaDepth (Li & Snavely, 2018) demonstrated that training on a diverse dataset allows generalizing monocular depth prediction beyond a specific domain. MiDaS (Ranftl et al., 2022) advanced this idea by training on a large mix of diverse datasets with a scale-and-shift-invariant loss. Follow-up works applied this recipe to transformer-based architectures (Ranftl et al., 2021; Birkl et al., 2023) and further expanded the set of feasible datasets through self-supervision (Spencer et al., 2023; Yang et al., 2024a). A line of work uses self-supervision to learn from unlabeled image and video data (Petrovai & Nedevschi, 2022; Yang et al., 2024a). A number of recent approaches (Ke et al., 2024; Gui et al., 2024) harness diffusion models to synthesize relative depth maps. Although some of these methods demonstrated excellent generalization, their predictions are ambiguous in scale and shift, which precludes downstream applications that require accurate shapes, sizes, or distances.
+
+Zero-shot metric depth. A line of work sought to improve metric depth prediction through a global distribution of depth values (Fu et al., 2018; Bhat et al., 2021; 2022; Li et al., 2024b) and further conditioning on scene type (Bhat et al., 2023). A different approach directly takes into account camera intrinsics. Cam-Convs (Fácil et al., 2019) conditioned convolutions on the camera intrinsics. LeReS (Yin et al., 2021) trains a separate network for undistorting point clouds to recover scale and shift, Metric3D (Yin et al., 2023) scales images or depth maps to a canonical space and remaps estimated depth given the focal length, and ZeroDepth (Guizilini et al., 2023) learns camera-specific embedddings in a variational framework. DMD (Saxena et al., 2023) conditions a diffusion model on the field of view. Metric3D v2 (Hu et al., 2024) leverages surface normals as an auxilliary output to improve metric depth. All of these methods require the camera intrinsics to be known and accurate. More recent works attempt to reason about unknown camera intrinsics either through a separate network (Spencer et al., 2024) or by predicting a camera embedding for conditioning its depth predictions in a spherical space (Piccinelli et al., 2024). Akin to these recent approaches, our method does not require the focal length to be provided as input. We propose to directly estimate the field of view from intermediate features of the depth prediction network, and show that this substantially outperforms the prior state of the art in the task of cross-domain focal length estimation.
+
+Sharp occluding contours. SharpNet (Ramamonjisoa & Lepetit, 2019) incorporates normals and occluding contour constraints, but requires additional contour and normal supervision during training. BoostingDepth (Miangoleh et al., 2021) obtains detailed predictions from a low-resolution network by applying it independently to image patches. Since the patches lack global context, BoostingDepth fuses them through a sophisticated multi-step pipeline. PatchFusion (Li et al., 2024a) refines this concept through image-adaptive patch sampling and tailored modules that enable end-to-end training. A recent line of work leverages diffusion priors to enhance the sharpness of occlusion boundaries (Gui et al., 2024; Ke et al., 2024). These approaches predominantly focus on predicting relative (rather than metric) depth. We propose a simpler architecture without task-specific modules or diffusion priors and demonstrate that even sharper and more accurate results can be obtained while producing metric depth maps and reducing runtime by more than two orders of magnitude.
+
+Guided depth super-resolution uses the input image to upsample low-resolution depth predictions (Metzger et al., 2023; Zhong et al., 2023). SMDNet (Tosi et al., 2021) predicts bimodal mixture densities to sharpen occluding contours. And Ramamonjisoa et al. (Ramamonjisoa et al., 2020) introduce a module for learning to sharpen depth boundaries of a pretrained network. These works are orthogonal to ours and could be applied to further upsample our high-resolution predictions.
+
+To evaluate boundary tracing in predicted depth maps, Koch et al. (2018) introduce the iBims dataset with manual annotations of occluding contours and corresponding metrics. The need for manual annotation and highly accurate depth ground truth constrain the benchmark to a small set of indoor scenes. We contribute metrics based on segmentation and matting datasets that provide a complementary view by enabling evaluation on complex, dynamic environments or scenes with exceedingly fine detail for which ground-truth depth is impossible to obtain.
+
+Multi-scale vision transformers. Vision transformers (ViTs) have emerged as the dominant general-purpose architecture for perception tasks, but operate at low resolution (Dosovitskiy et al., 2021). Naïvely scaling the architecture to higher resolutions is prohibitive due to the computational complexity. Several works identified the attention layers as the main obstacle to scaling up ViT and have proposed alternatives (Zhu et al., 2021; Liu et al., 2021; Li et al., 2022c; Chu et al., 2021; Liu et al., 2022a; 2023; Cai et al., 2023; Jaegle et al., 2022).
+
+Another line of work modified the ViT architecture to produce a hierarchy of features (Fan et al., 2021; Xie et al., 2021; Yuan et al., 2021; Ranftl et al., 2021; Chen et al., 2021; Lee et al., 2022).
+
+Rather than modifying the ViT architecture, which requires computationally expensive retraining, we propose a network architecture that applies a plain ViT backbone at multiple scales and fuses predictions into a single high-resolution output. This architecture benefits from ongoing improvements in ViT pretraining, as new variants can be easily swapped in (Oquab et al., 2024; Peng et al., 2022b; Sun et al., 2023).
+
+Pretrained vision transformers have been adapted for semantic segmenation and object detection. ViT-Adapter (Chen et al., 2023) and ViT-CoMer (Xia et al., 2024) supplement a pretrained ViT with a convolutional network for dense prediction, whereas ViT-Det (Li et al., 2022b) builds a feature pyramid on top of a pretrained ViT. Distinct from these, we fuse features from the ViT applied at multiple scales to learn global context together with local detail.
+
+3Method
+3.1Network
+The key idea of our architecture is to apply plain ViT encoders (Dosovitskiy et al., 2021) on patches extracted at multiple scales and fuse the patch predictions into a single high-resolution dense prediction in an end-to-end trainable model. Fig. 3 illustrates the architecture. For predicting depth, we employ two ViT encoders, a patch encoder and an image encoder. The patch encoder is applied on patches extracted at multiple scales. Intuitively, this may allow learning representations that are scale-invariant as weights are shared across scales. The image encoder anchors the patch predictions in a global context. It is applied to the whole input image, downsampled to the base input resolution of the chosen encoder backbone (in our case 384
+×
+384).
+
+Refer to caption
+Figure 3:Overview of the network architecture. An image is downsampled at several scales. At each scale, it is split into patches, which are processed by a ViT-based patch encoder, with weights shared across scales. Patches are merged into feature maps, upsampled, and fused via a DPT decoder. Predictions are anchored by a separate image encoder that provides global context.
+The whole network operates at a fixed resolution of 1536
+×
+1536, which was chosen as a multiple of the ViT’s 384
+×
+384. This guarantees a sufficiently large receptive field and constant runtimes for any image while preventing out-of-memory errors (which we repeatedly observed for variable-resolution approaches on large images). Confirming this design choice, the results we report in Sec. 4 and Tab. 5 demonstrate that Depth Pro is consistently orders of magnitude faster than variable-resolution approaches while being more accurate and producing sharper boundaries. A key benefit of assembling our architecture from plain ViT encoders over custom encoders is the abundance of pretrained ViT-based backbones that can be harnessed (Oquab et al., 2024; Peng et al., 2022b; Sun et al., 2023). We evaluate several pretrained backbones and compare our architecture to other high-resolution architectures in the appendices (Tab. 8 and Sec. B.2).
+
+After downsampling to 1536
+×
+1536, the input image is split into patches of 
+384
+×
+384
+. For the two finest scales, we let patches overlap to avoid seams. At each scale, the patches are fed into the patch encoder, which produces a feature tensor at resolution 
+24
+×
+24
+ per input patch (features 3 – 6 in Fig. 3). At the finest scale we further extract intermediate features (features 1 & 2 in Fig. 3) to capture finer-grained details. We merge the feature patches into maps, which are fed into the decoder module, which resembles the DPT decoder (Ranftl et al., 2021).
+
+In addition to sharing representations across scales, the patch-based application of the encoder network allows trivial parallelization as patches can be processed independently. Another source of computational efficiency comes from the lower computational complexity of patch-based processing in comparison to scaling up the ViT to higher resolutions. The reason is multi-head self-attention (Vaswani et al., 2017), whose computational complexity scales quadratically with the number of input pixels, and thus quartically in image dimension.
+
+3.2Sharp monocular depth estimation
+Training objectives.
+For each input image 
+I
+, our network 
+f
+ predicts a canonical inverse depth image 
+C
+=
+f
+⁢
+(
+I
+)
+. To obtain a dense metric depth map 
+D
+m
+, we scale by the horizontal field of view, represented by the focal length 
+f
+𝑝𝑥
+ and the width 
+w
+ (Yin et al., 2023): 
+D
+m
+=
+f
+𝑝𝑥
+w
+⁢
+C
+.
+
+We train with several objectives, all based on canonical inverse depth, because this prioritizes areas close to the camera over farther areas or the whole scene, and thus supports visual quality in applications such as novel view synthesis. Let 
+C
+^
+ be the ground-truth canonical inverse depth. For all metric datasets we compute the mean absolute error (
+ℒ
+𝑀𝐴𝐸
+, Eq. 1) per pixel 
+i
+, and discard pixels with an error in the top 
+20
+%
+ per image for real-world (as opposed to synthetic) datasets:
+
+ℒ
+𝑀𝐴𝐸
+⁢
+(
+C
+^
+,
+C
+)
+=
+1
+N
+⁢
+∑
+i
+N
+|
+C
+^
+i
+−
+C
+i
+|
+.
+(1)
+For all non-metric datasets (i.e., those without reliable camera intrinsics or inconsistent scale), we normalize predictions and ground truth via the mean absolute deviation from the median (Ranftl et al., 2022) before applying a loss. We further compute errors on the first and second derivatives of (canoncial) inverse depth maps at multiple scales. Let 
+∇
+∗
+ indicate a spatial derivative operator 
+∗
+, such as Scharr (S) (Scharr et al., 1997) or Laplace (L), and 
+p
+ the error norm. We define the multi-scale derivative loss over 
+M
+ scales as
+
+ℒ
+∗
+,
+p
+,
+M
+⁢
+(
+C
+,
+C
+^
+)
+=
+1
+M
+⁢
+∑
+j
+M
+1
+N
+j
+⁢
+∑
+i
+N
+j
+|
+∇
+∗
+C
+i
+j
+−
+∇
+∗
+C
+^
+i
+j
+|
+p
+,
+(2)
+where the scales 
+j
+ are computed by blurring and downsampling the inverse depth maps by a factor of 2 per scale. As shorthands we define the Mean Absolute Gradient Error 
+ℒ
+𝑀𝐴𝐺𝐸
+=
+ℒ
+S
+,
+1
+,
+6
+, the Mean Absolute Laplace Error 
+ℒ
+𝑀𝐴𝐿𝐸
+=
+ℒ
+L
+,
+1
+,
+6
+, and the Mean Squared Gradient Error 
+ℒ
+𝑀𝑆𝐺𝐸
+=
+ℒ
+S
+,
+2
+,
+6
+.
+
+Training curriculum.
+We propose a training curriculum motivated by the following observations. First, training on a large mix of real-world and synthetic datasets improves generalization as measured by zero-shot accuracy (Ranftl et al., 2022; 2021; Yang et al., 2024a; Hu et al., 2024). Second, synthetic datasets provide pixel-accurate ground truth, whereas real-world datasets often contain missing areas, mismatched depth, or false measurements on object boundaries. Third, predictions get sharper over the course of training.
+
+Based on these observations, we design a two-stage training curriculum. In the first stage, we aim to learn robust features that allow the network to generalize across domains. To that end, we train on a mix of all labeled training sets. Specifically, we minimize 
+ℒ
+𝑀𝐴𝐸
+ on metric datasets and its normalized version on non-metric datasets. 
+ℒ
+𝑀𝐴𝐸
+ is chosen for its robustness in handling potentially corrupted real-world ground truth. To steer the network towards sharp boundaries, we aim to also supervise on gradients of the predictions. Done naïvely, however, this can hinder optimization and slow down convergence. We found that a scale-and-shift-invariant loss on gradients, applied only to synthetic datasets, worked best. Controlled experiments are reported in the appendices.
+
+The second stage of training is designed to sharpen boundaries and reveal fine details in the predicted depth maps. To minimize the effect of inaccurate ground truth, at this stage we only train on synthetic datasets that provide high-quality pixel-accurate ground truth. (Note that this inverts the common practice of first training on synthetic data and then fine-tuning on real data (Gaidon et al., 2016; Gómez et al., 2023; Sun et al., 2021).) Specifically, we again minimize the 
+ℒ
+𝑀𝐴𝐸
+ and supplement it with a selection of losses on the first- and second-order derivatives: 
+ℒ
+𝑀𝐴𝐺𝐸
+, 
+ℒ
+𝑀𝐴𝐿𝐸
+, and 
+ℒ
+𝑀𝑆𝐺𝐸
+. We provide a detailed specification of the loss functions that are applied at each stage in the appendices.
+
+Evaluation metrics for sharp boundaries.
+Applications such as novel view synthesis require depth maps to adhere to object boundaries. This is particularly challenging for thin structures. Misaligned or blurry boundaries can make objects appear distorted or split into parts. Common benchmarks for monocular depth prediction rarely take boundary sharpness into account. This may be attributed in part to the lack of diverse and realistic datasets with precise pixel-accurate ground-truth depth. To address this shortcoming, we propose a new set of metrics specifically for the evaluation of depth boundaries. Our key observation is that we can leverage existing high-quality annotations for matting, saliency, or segmentation as ground truth for depth boundaries. We treat annotations for these tasks as binary maps, which define a foreground/background relationship between an object and its environment. (This relationship may not hold in every case, especially for segmentation masks. However, we can easily discard such problematic cases through manual inspection. It is much easier to filter out a segmentation mask than to annotate it.) To ensure that the relationship holds, we only consider pixels around edges in the binary map.
+
+We first define the metrics for depth maps and later derive the formulation for binary segmentation masks. Motivated by the ranking loss (Chen et al., 2016), we use the pairwise depth ratio of neighboring pixels to define a foreground/background relationship. Let 
+i
+,
+j
+ be the locations of two neighboring pixels. We then define an occluding contour 
+c
+d
+ derived from a depth map 
+d
+ as 
+c
+d
+⁢
+(
+i
+,
+j
+)
+=
+[
+d
+⁢
+(
+j
+)
+d
+⁢
+(
+i
+)
+>
+(
+1
++
+t
+100
+)
+]
+, where 
+[
+⋅
+]
+ is the Iverson bracket. Intuitively, this indicates the presence of an occluding contour between pixels 
+i
+ and 
+j
+ if their corresponding depth differs by more than 
+t
+%
+. For all pairs of neighboring pixels, we can then compute the precision (
+P
+) and recall (
+R
+) as
+
+P
+⁢
+(
+t
+)
+=
+∑
+i
+,
+j
+∈
+N
+⁢
+(
+i
+)
+c
+d
+⁢
+(
+i
+,
+j
+)
+∧
+c
+d
+^
+⁢
+(
+i
+,
+j
+)
+∑
+i
+,
+j
+∈
+N
+⁢
+(
+i
+)
+c
+d
+⁢
+(
+i
+,
+j
+)
+⁢
+ and 
+R
+⁢
+(
+t
+)
+=
+∑
+i
+,
+j
+∈
+N
+⁢
+(
+i
+)
+c
+d
+⁢
+(
+i
+,
+j
+)
+∧
+c
+d
+^
+⁢
+(
+i
+,
+j
+)
+∑
+i
+,
+j
+∈
+N
+⁢
+(
+i
+)
+c
+d
+^
+⁢
+(
+i
+,
+j
+)
+.
+(3)
+Note that both 
+P
+ and 
+R
+ are scale-invariant. In our experiments, we report the F1 score. To account for multiple relative depth ratios, we further perform a weighted averaging of the F1 values with thresholds that range linearly from 
+t
+m
+⁢
+i
+⁢
+n
+=
+5
+ to 
+t
+m
+⁢
+a
+⁢
+x
+=
+25
+, with stronger weights towards high threshold values. Compared to other edge-based metrics (such as the edge accuracy and completion from iBims (Koch et al., 2018)), our metric does not require any manual edge annotation, but simply pixelwise ground truth, which is easily obtained for synthetic datasets.
+
+Similarly, we can also identify occluding contours from binary label maps that can be derived from real-world segmentation, saliency, and matting datasets. Given a binary mask 
+b
+ over the image, we define the presence of an occluding contour 
+c
+b
+ between pixels 
+i
+,
+j
+ as 
+c
+b
+⁢
+(
+i
+,
+j
+)
+=
+b
+⁢
+(
+i
+)
+∧
+¬
+b
+⁢
+(
+j
+)
+. With this definition at hand, we compute the recall 
+R
+⁢
+(
+t
+)
+ by replacing the occluding contours from depth maps in Eq. 3 with those from binary maps. Since the binary maps commonly label whole objects, we cannot obtain ground-truth occluding contours that do not align with object silhouettes. Thus the boundary annotation is incomplete – some but not all occluding contours are identified by this procedure. Therefore we can only compute the recall but not the precision for binary maps.
+
+To penalize blurry edges, we suppress non-maximum values of 
+c
+d
+^
+ within the valid bounds of 
+c
+d
+^
+⁢
+(
+i
+,
+j
+)
+ connected components. For additional experiments and qualitative results we refer to the appendices.
+
+3.3Focal length estimation
+To handle images that may have inaccurate or missing EXIF metadata, we supplement our network with a focal length estimation head. A small convolutional head ingests frozen features from the depth estimation network and task-specific features from a separate ViT image encoder to predict the horizontal angular field-of-view. We use 
+ℒ
+2
+ as the training loss. We train the focal length head and the ViT encoder after the depth estimation training. Separating the focal length training has several benefits over joint training with the depth network. It avoids the necessity of balancing the depth and focal length training objectives. It also allows training the focal length head on a different set of datasets, excluding some narrow-domain single-camera datasets that are used in training the depth estimation network, and adding large-scale image datasets that provide focal length supervision but no depth supervision. Further details are provided in the appendices.
+
+4Experiments
+This section summarizes the key results. Additional details and experiments are reported in the appendices, including details on datasets, hyperparameters, experimental protocols, and the comparison of runtimes, which is summarized in Fig. 2. The appendices also report controlled experiments, including controlled studies on network architectures, training objectives, and training curricula.
+
+Here we summarize a number of key comparisons of Depth Pro to state-of-the-art metric monocular depth estimation systems. One challenge in conducting such a comparison is that many leading recent systems are trained on bespoke combinations of datasets. Some systems use proprietary datasets that are not publicly available, and some use datasets that are only available under restrictive licenses. Some recent systems also train on unlabeled datasets or incorporate pretrained models (e.g., diffusion models) that were trained on additional massive datasets. This rules out the possibility of a comparison that controls for training data (e.g., only comparing to systems that use the same datasets we do). At this stage of this research area, the only feasible comparison to other leading cross-domain monocular depth estimation models is on a full system-to-system basis. Fully trained models (each trained on a large, partially overlapping and partially distinct collection of datasets) are compared to each other zero-shot on datasets that none of the compared systems trained on.
+
+Zero-shot metric depth. We evaluate our method’s ability to predict zero-shot metric depth and compare against the state of the art in Tab. 1. Our baselines include Depth Anything (Yang et al., 2024a), Metric3D (Yin et al., 2023), PatchFusion (Li et al., 2024a), UniDepth (Piccinelli et al., 2024), ZeroDepth (Guizilini et al., 2023) and ZoeDepth (Bhat et al., 2023). We also report results for the very recent Depth Anything v2 (Yang et al., 2024b) and Metric3D v2 (Hu et al., 2024).
+
+As an overall summary measure of metric depth accuracy, Tab. 1 uses the 
+δ
+1
+ metric (Ladicky et al., 2014), which is commonly used for this purpose (Yin et al., 2023; Yang et al., 2024a; Piccinelli et al., 2024). It is defined as the percentage of inlier pixels, for which the predicted and ground-truth depths are within 25% of each other. We picked this metric for its robustness, with the strictest threshold found in the literature (
+25
+%
+).
+
+Corresponding tables for additional metrics can be found in Sec. A.2 of the appendices, including 
+𝐴𝑏𝑠𝑅𝑒𝑙
+ (Ladicky et al., 2014), 
+𝐿𝑜𝑔
+10
+, 
+δ
+2
+ and 
+δ
+3
+ scores, as well as point-cloud metrics (Spencer et al., 2022). Tab. 1 also reports the average rank of each method across datasets, a common way to summarize cross-dataset performance (Ranftl et al., 2022).
+
+We report results on Booster (Ramirez et al., 2024), Middlebury (Scharstein et al., 2014), Sun-RGBD (Song et al., 2015), ETH3D (Schöps et al., 2017), nuScenes (Caesar et al., 2020), and Sintel (Butler et al., 2012), because, to our knowledge, they were never used in training any of the evaluated systems. Despite our best efforts, we were not able to run ZeroDepth on Booster, Middlebury, or Sun-RGBD as it consistently ran out of memory due to the high image resolutions. More details on our evaluation setup can be found in Sec. C of the appendix.
+
+The results in Tab. 1 confirm the findings of Piccinelli et al. (2024), who observed considerable domain bias in some of the leading metric depth estimation models. Notably, Depth Anything v1 & v2 focus on relative depth estimation; for metric depth, they provide different models for different domains, fine-tuned either for indoor or for outdoor scenes. Metric3D v1 & v2 provide domain-invariant models, but their performance depends strongly on careful selection of the crop size at test time, which is performed per domain in their experiments and thus violates the zero-shot premise. We tried setting the crop size automatically based on the aspect ratio of the image, but this substantially degraded the performance of Metric3D; for this reason, we use the recommended non-zero-shot protocol, with the recommended per-domain crop sizes. Since domain-specific models and crop sizes violate the strict zero-shot premise we (and other baselines) operate under, we mark the Depth Anything and Metric3D results in gray in Tab. 1.
+
+We find that Depth Pro demonstrates the strongest generalization by consistently scoring among the top approaches per dataset and obtaining the best average rank across all datasets.
+
+Table 1:Zero-shot metric depth accuracy. We report the 
+δ
+1
+ score per dataset (higher is better) and aggregate performance across datasets via the average rank (lower is better). Methods in gray are not strictly zero-shot. Results on additional metrics and datasets are presented in the appendices.
+Method
+ 	Booster	ETH3D	Middlebury	NuScenes	Sintel	Sun-RGBD	Avg. Rank
+↓
+DepthAnything (Yang et al., 2024a)
+ 	52.3	9.3	39.3	35.4	6.9	85.0	5.7
+DepthAnything v2  (Yang et al., 2024b)
+ 	59.5	36.3	37.2	17.7	5.9	72.4	5.8
+Metric3D  (Yin et al., 2023)
+ 	4.7	34.2	13.6	64.4	17.3	16.9	5.8
+Metric3D v2  (Hu et al., 2024)
+ 	39.4	87.7	29.9	82.6	38.3	75.6	3.7
+PatchFusion  (Li et al., 2024a)
+ 	
+22.6
+51.8	49.9	
+20.4
+14.0
+53.6
+5.2
+UniDepth  (Piccinelli et al., 2024)
+ 	
+27.6
+25.3
+31.9
+83.6	
+16.5
+95.8	4.2
+ZeroDepth  (Guizilini et al., 2023)
+ 	OOM	OOM	
+46.5
+64.3
+12.9
+OOM	
+4.6
+ZoeDepth  (Bhat et al., 2023)
+ 	
+21.6
+34.2
+53.8	
+28.1
+7.8
+85.7	
+5.3
+Depth Pro (Ours)
+ 	46.6	41.5	60.5	
+49.1
+40.0	89.0	2.5
+Table 2: Zero-shot boundary accuracy. We report the F1 score for dataset with ground-truth depth, and boundary recall (
+R
+) for matting and segmentation datasets. Qualitative results are shown on a sample from the AM-2k dataset (Li et al., 2022a). Higher is better for all metrics.
+Method	Sintel F1
+↑
+Spring F1
+↑
+iBims F1
+↑
+AM R
+↑
+P3M R
+↑
+DIS R
+↑
+Absolute
+DPT (Ranftl et al., 2021)	0.181	0.029	0.113	0.055	0.075	0.018
+Metric3D (Yin et al., 2023) 	0.037	0.000	0.055	0.003	0.003	0.001
+Metric3D v2 (Hu et al., 2024) 	0.321	0.024	0.096	0.024	0.013	0.006
+ZoeDepth (Bhat et al., 2023) 	0.027	0.001	0.035	0.008	0.004	0.002
+PatchFusion (Li et al., 2024a) 	0.312	0.032	0.134	0.061	0.109	0.068
+UniDepth  (Piccinelli et al., 2024) 	0.316	0.000	0.039	0.001	0.003	0.000
+Rel.
+DepthAnything (Yang et al., 2024a)	0.261	0.045	0.127	0.058	0.094	0.023
+DepthAnything v2 (Yang et al., 2024b) 	0.228	0.056	0.111	0.107	0.131	0.056
+Marigold (Ke et al., 2024)	0.068	0.032	0.149	0.064	0.101	0.049
+Depth Pro (Ours)	0.409	0.079	0.176	0.173	0.168	0.077
+[Uncaptioned image]	[Uncaptioned image]	[Uncaptioned image]	[Uncaptioned image]	[Uncaptioned image]	[Uncaptioned image]
+Image	Alpha Matte	Depth Pro (Ours)	DepthAnything v2	PatchFusion	Marigold
+Zero-shot boundaries. Tab. 2 summarizes the evaluation of boundary accuracy for Depth Pro and a number of baselines. This evaluation is conducted in a zero-shot setting: models are only evaluated on datasets that were not seen during training. Since our boundary metrics are scale-invariant, our baselines here also include methods that only predict relative (rather than absolute metric) depth. Our absolute baselines include Metric3D (Yin et al., 2023), Metric3D v2 (‘giant’ model) (Hu et al., 2024), PatchFusion (Li et al., 2024a), UniDepth (Piccinelli et al., 2024), and ZoeDepth (Bhat et al., 2023). We also report results for the relative variants of Depth Anything v1 & v2 (Yang et al., 2024a; b) because they yield sharper boundaries than their metric counterparts. Lastly, we include Marigold (Ke et al., 2024), a recent diffusion-based relative depth model that became popular due to its high-fidelity predictions. We use the boundary metrics introduced in Sec. 3.2, and report the average boundary F1 score for datasets with ground-truth depth, and boundary recall (
+R
+) for datasets with matting or segmentation annotations. For image matting datasets, a pixel is marked as occluding when the value of the alpha matte is above 
+0.1
+.
+
+The datasets include Sintel (Butler et al., 2012) and Spring (Mehl et al., 2023), which are synthetic. We also include the iBims dataset (Koch et al., 2018) which is often used specifically to evaluate depth boundaries, despite having low resolution. We refer to the appendices for a full slate of iBims-specific metrics. To evaluate high-frequency structures encountered in natural images (such as hair or fur), we use AM-2k (Li et al., 2022a) and P3M-10k (Li et al., 2021), which are high-resolution image matting datasets that were used to evaluate image matting models (Li et al., 2023). Additionally, we further report results on the DIS-5k (Qin et al., 2022) image segmentation dataset. This is an object segmentation dataset that provides highly accurate binary masks across diverse images. We manually remove samples in which the segmented object is occluded by foreground objects. Fig. 2 visually summarizes the boundary recall metric on the AM-2k dataset, as a function of runtime.
+
+We find that Depth Pro produces more accurate boundaries than all baselines on all datasets, by a significant margin. As can be observed in Fig. 1, in the images in Tab. 2, and the additional results in Sec. A, the competitive metric accuracy of the recent Metric3D v2 and Depth Anything v2 models does not imply sharp boundaries. Depth Pro has a consistently higher recall for thin structures like hair and fur and yields sharper boundaries. This is also true in comparison to the diffusion-based Marigold, which leverages a prior trained on billions of real-word images, as well as PatchFusion, which operates at variable resolution. Note that the runtime of Depth Pro is orders of magnitude faster than Marigold and PatchFusion (see Fig. 2 & Tab. 5). Fig. 4 demonstrates the benefits of sharp boundary prediction for novel view synthesis from a single image.
+
+Input
+                                        
+\begin{overpic}[height=75.52312pt]{fig/tmpi/m_16b22afc/m_16b22afc.jpg} \end{overpic}
+   
+ 	                                   
+Refer to caption
+   
+ 	                                    
+Refer to caption
+   
+ 
+Depth Pro
+                                        
+\begin{overpic}[height=75.52312pt]{fig/tmpi/m_16b22afc/m_16b22afc_depthpro_% frame0078.jpg} \end{overpic}
+   
+ 	                                   
+Refer to caption
+   
+ 	                                    
+Refer to caption
+   
+ 
+Depth Anything v2
+                                       
+\begin{overpic}[height=75.52312pt]{fig/tmpi/m_16b22afc/m_16b22afc_depth_% anything_v2_relative_frame0078.jpg} \end{overpic}
+   
+ 	                                   
+Refer to caption
+   
+ 	                                    
+Refer to caption
+   
+ 
+Marigold
+                                       
+\begin{overpic}[height=75.52312pt]{fig/tmpi/m_16b22afc/m_16b22afc_marigold_% frame0078.jpg} \end{overpic}
+   
+ 	                                   
+Refer to caption
+   
+ 	                                    
+Refer to caption
+   
+ 
+Metric3D v2
+                                        
+\begin{overpic}[height=75.52312pt]{fig/tmpi/m_16b22afc/m_16b22afc_metric3d_% frame0078.jpg} \end{overpic}
+   
+ 	                                   
+Refer to caption
+   
+ 	                                    
+Refer to caption
+   
+ 
+Figure 4:Impact on novel view synthesis. We plug depth maps produced by Depth Pro, Marigold (Ke et al., 2024), Depth Anything v2 (Yang et al., 2024b), and Metric3D v2 (Hu et al., 2024) into a recent publicly available novel view synthesis system (Khan et al., 2023). We demonstrate results on images from AM-2k (Li et al., 2022a) (1st & 3rd column) and DIS-5k (Qin et al., 2022) (2nd column). Depth Pro produces sharper and more accurate depth maps, yielding cleaner synthesized views. Depth Anything v2 and Metric3D v2 suffer from misalignment between the input images and estimated depth maps, resulting in foreground pixels bleeding into the background. Marigold is considerably slower than Depth Pro and produces less accurate boundaries, yielding artifacts in synthesized images. Zoom in for detail.
+Focal length estimation. Previous work (Piccinelli et al., 2024; Kocabas et al., 2021; Baradad & Torralba, 2020) does not provide comprehensive systematic evaluations of focal length estimators on in-the-wild images. To address this, we curated a zero-shot test dataset. To this end, we selected diverse datasets with intact EXIF data, enabling reliable assessment of focal length estimation accuracy. FiveK (Bychkovsky et al., 2011), DDDP (Abuolaim & Brown, 2020), and RAISE (Dang-Nguyen et al., 2015) contribute professional-grade photographs taken with SLR cameras. SPAQ (Fang et al., 2020) provides casual photographs from mobile phones. PPR10K (Liang et al., 2021) provides high-quality portrait images. Finally, ZOOM (Zhang et al., 2019) includes sets of scenes captured at various optical zoom levels.
+
+Table 3:Comparison on focal length estimation. We report 
+δ
+25
+%
+ and 
+δ
+50
+%
+ for each dataset, i.e., the percentage of images with relative error (focal length in mm) less than 25% and 50%, respectively.
+DDDP	FiveK	PPR10K	RAISE	SPAQ	ZOOM
+δ
+25
+%
+δ
+50
+%
+δ
+25
+%
+δ
+50
+%
+δ
+25
+%
+δ
+50
+%
+δ
+25
+%
+δ
+50
+%
+δ
+25
+%
+δ
+50
+%
+δ
+25
+%
+δ
+50
+%
+UniDepth (Piccinelli et al., 2024)
+ 	6.8	40.3	24.8	56.2	13.8	44.2	35.4	74.8	44.2	77.4	20.4	45.4
+SPEC (Kocabas et al., 2021)
+ 	14.6	46.3	30.2	56.6	34.6	67.0	49.2	78.6	50.0	82.2	23.2	43.6
+im2pcl (Baradad & Torralba, 2020)
+ 	7.3	29.6	28.0	60.0	24.2	61.4	51.8	75.2	26.6	55.0	22.4	42.8
+Depth Pro (Ours)
+ 	66.9	85.8	74.2	92.4	64.6	88.8	84.2	96.4	68.4	85.2	69.8	91.6
+Tab. 3 compares Depth Pro against state-of-the-art focal length estimators and shows the percentage of images with relative estimation error under 25% and 50%, respectively. Depth Pro is the most accurate across all datasets. For example, on PPR10K, a dataset of human portraits, our method leads with 64.6% of the images having a focal length error below 25%, while the second-best method, SPEC, only achieves 34.6% on this metric. We attribute this superior performance to our network design and training protocol, which decouple training of the focal length estimator from the depth network, enabling us to use different training sets for these two tasks. Further controlled experiments are reported in the appendices.
+
+5Conclusion & limitations
+Depth Pro produces high-resolution metric depth maps with high-frequency detail at sub-second runtimes. Our model achieves state-of-the-art zero-shot metric depth estimation accuracy without requiring metadata such as camera intrinsics, and traces out occlusion boundaries in unprecedented detail, facilitating applications such as novel view synthesis from single images ‘in the wild’. While Depth Pro outperforms prior work along multiple dimensions, it is not without limitations. For example, the model is limited in dealing with translucent surfaces and volumetric scattering, where the definition of single pixel depth is ill-posed and ambiguous.
