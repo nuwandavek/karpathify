@@ -39,12 +39,41 @@ function readImportantFilesAsJson(dirPath) {
   return result;
 }
 
+const fileInfo = {
+  object: "file",
+  id: "file-h83ykpO6P2akzhgD1GdbRTpe",
+  purpose: "assistants",
+  filename: "depth-pro.pdf",
+  bytes: 27977407,
+  created_at: 1728537170,
+  status: "processed",
+  status_details: null,
+  _request_id: "req_2a3b263ab87e7144e88df1e0823002b2",
+}
+
+// async function convertFromPDF() {
+//   // const filePath = './docs/depth-pro.pdf'
+//   // const response = await client.files.create({
+//   //   purpose: 'assistants',
+//   //   file: fs.createReadStream(filePath)
+//   // });
+//   // console.log(response)
+//   const prompt = `Convert this pdf (File ID: ${fileInfo.id}) to a text file`;
+//   const chatCompletion = await client.chat.completions.create({
+//     messages: [{ role: "user", content: prompt }],
+//     model: "gpt-4o",
+//   });
+//   console.log(chatCompletion.choices[0].message.content);
+// }
+
+
 async function main() {
   const repoState = JSON.stringify(readImportantFilesAsJson("./repo"));
+  const paperMD = fs.readFileSync("./docs/depth-pro.md", "utf-8");
   const currentProficiency = "I understand calculus, python, pytorch";
 
   const prompt = `
-  The user needs to understand a programming project.
+  The user needs to understand a programming project and accompanying paper.
 
 Instructions:
 - Go through the repo, and give me a 5 lesson plan to learn this. 
@@ -53,6 +82,7 @@ Instructions:
 - Each lesson needs to build upon the previous lesson in complexity and length.
 
   <Repo>${repoState}</Repo>
+  <Paper>${paperMD}</Paper>
 ${currentProficiency}`;
   const chatCompletion = await client.chat.completions.create({
     messages: [{ role: "user", content: prompt }],
