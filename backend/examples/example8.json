@@ -1,0 +1,146 @@
+{
+  "lessons": [
+    {
+      "title": "Lesson 1: Introduction to DepthPro and Monocular Depth Estimation",
+      "description": "In this lesson, we will explore the main `DepthPro` class and understand how it performs monocular depth estimation.",
+      "content": [
+        {
+          "code": "import torch\nimport torch.nn as nn",
+          "notes": "We start by importing the necessary PyTorch modules. The `torch.nn` module provides neural network components."
+        },
+        {
+          "code": "class DepthPro(nn.Module):\n    def __init__(self, encoder, decoder, last_dims, use_fov_head=True, fov_encoder=None):\n        super().__init__()\n        self.encoder = encoder\n        self.decoder = decoder",
+          "notes": "The `DepthPro` class is the main model for depth estimation. It inherits from `nn.Module`, which is the base class for all neural network modules in PyTorch."
+        },
+        {
+          "code": "def forward(self, x):\n    _, _, H, W = x.shape\n    assert H == self.img_size and W == self.img_size\n    \n    encodings = self.encoder(x)\n    features, features_0 = self.decoder(encodings)\n    canonical_inverse_depth = self.head(features)",
+          "notes": "The `forward` method defines how the input `x` is transformed through the encoder and decoder to produce the depth map."
+        },
+        {
+          "code": "def infer(self, x, f_px=None, interpolation_mode=\"bilinear\"):\n    if len(x.shape) == 3:\n        x = x.unsqueeze(0)\n    _, _, H, W = x.shape\n    resize = H != self.img_size or W != self.img_size\n    \n    if resize:\n        x = nn.functional.interpolate(\n            x,\n            size=(self.img_size, self.img_size),\n            mode=interpolation_mode,\n            align_corners=False\n        )\n    \n    canonical_inverse_depth, fov_deg = self.forward(x)\n    if f_px is None:\n        f_px = 0.5 * W / torch.tan(0.5 * torch.deg2rad(fov_deg.to(torch.float)))\n    \n    inverse_depth = canonical_inverse_depth * (W / f_px)\n    depth = 1.0 / torch.clamp(inverse_depth, min=1e-4, max=1e4)",
+          "notes": "The `infer` method performs inference on an input image `x`. It handles resizing and computes the metric depth using the estimated focal length if `f_px` is not provided."
+        },
+        {
+          "code": "# From the paper, Section 3.1 Network\n# The DepthPro architecture applies a plain ViT encoder at multiple scales and fuses the patch predictions into a single high-resolution output.",
+          "notes": "In the paper (Section 3.1), the authors describe how DepthPro uses Vision Transformers (ViT) at multiple scales to capture both global context and fine details."
+        },
+        {
+          "code": "# Equation from the paper:\n# D_m = f_px / (w * C)\n# where D_m is the metric depth, f_px is the focal length in pixels, w is the image width, and C is the canonical inverse depth.",
+          "notes": "This formula, mentioned in the paper, shows how DepthPro computes metric depth from the canonical inverse depth and the estimated focal length."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 2: Understanding the DepthPro Encoder",
+      "description": "In this lesson, we delve into the encoder architecture of DepthPro, focusing on how it extracts multi-resolution features using Vision Transformers.",
+      "content": [
+        {
+          "code": "# encoder.py\nclass DepthProEncoder(nn.Module):\n    def __init__(self, dims_encoder, patch_encoder, image_encoder, hook_block_ids, decoder_features):\n        super().__init__()\n        self.dims_encoder = list(dims_encoder)\n        self.patch_encoder = patch_encoder\n        self.image_encoder = image_encoder",
+          "notes": "The `DepthProEncoder` class combines a patch encoder and an image encoder to create multi-resolution encodings."
+        },
+        {
+          "code": "# The patch encoder processes overlapping patches at multiple scales.\n# The image encoder provides global context.",
+          "notes": "In DepthPro, the patch encoder captures local details by processing patches, while the image encoder captures the overall scene."
+        },
+        {
+          "code": "def _create_pyramid(self, x):\n    x0 = x\n    x1 = F.interpolate(x, scale_factor=0.5, mode=\"bilinear\", align_corners=False)\n    x2 = F.interpolate(x, scale_factor=0.25, mode=\"bilinear\", align_corners=False)\n    return x0, x1, x2",
+          "notes": "The `_create_pyramid` method creates a 3-level image pyramid to process the image at different scales."
+        },
+        {
+          "code": "def forward(self, x):\n    x0, x1, x2 = self._create_pyramid(x)\n    # Process patches at multiple scales\n    x0_patches = self.split(x0, overlap_ratio=0.25)\n    x1_patches = self.split(x1, overlap_ratio=0.5)\n    x2_patches = x2",
+          "notes": "In the `forward` method, the encoder splits the image into patches at different scales to capture multi-scale features."
+        },
+        {
+          "code": "# From the paper, Section 3.1 Network\n# \"Patches are merged into feature maps, upsampled, and fused via a DPT decoder.\"\n",
+          "notes": "The paper explains that after processing patches with the ViT encoders, features are merged and upsampled to produce high-resolution feature maps."
+        },
+        {
+          "code": "# vit_factory.py\nfrom .vit import make_vit_b16_backbone\n\ndef create_vit(preset, use_pretrained=False, ...):\n    # Creates and loads a ViT backbone module\n    model = timm.create_model(\n        config.timm_preset, pretrained=use_pretrained, dynamic_img_size=True\n    )\n    model = make_vit_b16_backbone(model, ...)",
+          "notes": "The `create_vit` function builds a Vision Transformer model that serves as the backbone for the encoder."
+        },
+        {
+          "code": "# From the paper, Section 3.1 Network\n# \"A key benefit of assembling our architecture from plain ViT encoders over custom encoders is the abundance of pretrained ViT-based backbones that can be harnessed.\"",
+          "notes": "The authors highlight the advantage of using standard ViT models, which allows leveraging pretrained models for better performance."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 3: Exploring the Decoder and Multiresolution Fusion",
+      "description": "In this lesson, we study the decoder module, and how it fuses features to produce high-resolution depth maps.",
+      "content": [
+        {
+          "code": "# decoder.py\nclass MultiresConvDecoder(nn.Module):\n    def __init__(self, dims_encoder, dim_decoder):\n        super().__init__()\n        self.convs = nn.ModuleList([...])\n        self.fusions = nn.ModuleList([...])",
+          "notes": "The `MultiresConvDecoder` class takes encoder features from multiple resolutions and decodes them into a depth map."
+        },
+        {
+          "code": "def forward(self, encodings):\n    features = self.convs[-1](encodings[-1])\n    features = self.fusions[-1](features)\n    for i in range(len(encodings) - 2, -1, -1):\n        features_i = self.convs[i](encodings[i])\n        features = self.fusions[i](features, features_i)\n    return features",
+          "notes": "In the `forward` method, features from different encoder levels are fused together using `FeatureFusionBlock2d`."
+        },
+        {
+          "code": "class FeatureFusionBlock2d(nn.Module):\n    def __init__(self, num_features, deconv=False, batch_norm=False):\n        super().__init__()\n        self.resnet1 = self._residual_block(num_features, batch_norm)\n        self.resnet2 = self._residual_block(num_features, batch_norm)\n        # ...",
+          "notes": "The `FeatureFusionBlock2d` class fuses features from different resolutions and includes residual blocks to learn refinements."
+        },
+        {
+          "code": "def _residual_block(num_features, batch_norm):\n    # Creates a residual block with optional batch normalization\n    layers = [...]",
+          "notes": "Residual blocks help in training deep networks by allowing gradients to flow through skip connections."
+        },
+        {
+          "code": "# From the paper, Section 3.1 Network\n# \"After downsampling to 1536×1536, the input image is split into patches of 384×384. For the two finest scales, we let patches overlap to avoid seams.\"\n",
+          "notes": "The decoder combines the overlapping patches processed by the encoder to produce seamless high-resolution outputs."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 4: Field of View Estimation in DepthPro",
+      "description": "In this lesson, we explore how DepthPro estimates the focal length from a single image using a Field of View (FoV) network.",
+      "content": [
+        {
+          "code": "# fov.py\nclass FOVNetwork(nn.Module):\n    def __init__(self, num_features, fov_encoder=None):\n        super().__init__()\n        # Define the FOV head layers\n        self.head = nn.Sequential(...)",
+          "notes": "The `FOVNetwork` estimates the field of view (FoV) of the camera, which is necessary for computing metric depth without camera intrinsics."
+        },
+        {
+          "code": "def forward(self, x, lowres_feature):\n    if hasattr(self, 'encoder'):\n        x = F.interpolate(x, scale_factor=0.25, mode='bilinear', align_corners=False)\n        x = self.encoder(x)\n        lowres_feature = self.downsample(lowres_feature)\n        x = x.reshape_as(lowres_feature) + lowres_feature\n    else:\n        x = lowres_feature\n    return self.head(x)",
+          "notes": "The `forward` method combines features from the input image and the low-resolution feature map to estimate the FoV."
+        },
+        {
+          "code": "# From the paper, Section 3.3 Focal Length Estimation\n# \"To handle images that may have inaccurate or missing EXIF metadata, we supplement our network with a focal length estimation head.\"",
+          "notes": "Estimating the focal length allows DepthPro to compute metric depth even when camera intrinsics are unavailable."
+        },
+        {
+          "code": "# Equation from the paper:\n# f_px = 0.5 * w / tan(0.5 * FoV_deg * π / 180)\n# where f_px is the focal length in pixels, w is the image width, and FoV_deg is the estimated field of view in degrees.",
+          "notes": "This formula shows how the estimated FoV in degrees is converted to focal length in pixels."
+        }
+      ]
+    },
+    {
+      "title": "Lesson 5: Running DepthPro for Inference and Applications",
+      "description": "In this final lesson, we will learn how to use the DepthPro model for inference on images and understand how to integrate it into applications like novel view synthesis.",
+      "content": [
+        {
+          "code": "# run.py\nimport argparse\nfrom depth_pro import create_model_and_transforms, load_rgb\n\nif __name__ == \"__main__\":\n    parser = argparse.ArgumentParser()\n    # ...\n    args = parser.parse_args()",
+          "notes": "The `run.py` script provides an example of how to run DepthPro on a sample image using command-line arguments."
+        },
+        {
+          "code": "model, transform = create_model_and_transforms(device=get_torch_device(), precision=torch.half)\nmodel.eval()",
+          "notes": "We create the DepthPro model and set it to evaluation mode. The `create_model_and_transforms` function sets up the model and necessary image transformations."
+        },
+        {
+          "code": "image, _, f_px = load_rgb(image_path)\nprediction = model.infer(transform(image), f_px=f_px)",
+          "notes": "We load an image and its focal length (if available), then perform inference to obtain the depth map."
+        },
+        {
+          "code": "# From the paper, Section 1 Introduction\n# \"Our model, DepthPro, produces metric depth maps with absolute scale on arbitrary images ‘in the wild’ without requiring metadata such as camera intrinsics.\"",
+          "notes": "DepthPro can estimate depth maps with absolute scale even when camera intrinsics are missing, enabling applications like novel view synthesis."
+        },
+        {
+          "code": "# Example of visualizing the depth map\nimport matplotlib.pyplot as plt\nplt.imshow(prediction['depth'], cmap='turbo')\nplt.show()",
+          "notes": "We can visualize the predicted depth map using a colormap for better interpretation."
+        },
+        {
+          "code": "# Application: Novel View Synthesis\n# Using the estimated depth map, we can generate new views of the scene by warping the image.",
+          "notes": "Depth maps estimated by DepthPro can be used in applications such as synthesizing new viewpoints from a single image."
+        }
+      ]
+    }
+  ]
+}
